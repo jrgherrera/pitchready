@@ -139,7 +139,6 @@ export const es: Messages = {
     mins: 'MIN',
     fullMatchPlay: 'Partido completo',
     locationMap: 'Mapa de ubicación',
-    mapUnavailable: 'Mapa no disponible',
     openInMaps: 'Abrir en Maps',
     currentRoster: 'Plantilla actual',
     playersJoined: '{{count}} jugadores unidos',

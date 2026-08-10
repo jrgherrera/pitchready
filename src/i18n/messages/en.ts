@@ -138,7 +138,6 @@ const enCatalog = {
     mins: 'MINS',
     fullMatchPlay: 'Full Match Play',
     locationMap: 'Location Map',
-    mapUnavailable: 'Map unavailable',
     openInMaps: 'Open in Maps',
     currentRoster: 'Current Roster',
     playersJoined: '{{count}} Players Joined',

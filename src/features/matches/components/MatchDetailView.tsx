@@ -257,7 +257,8 @@ export function MatchDetailView({
             {t('matches.locationMap')}
           </h2>
           <div className="bg-[#0a1c17] overflow-hidden border border-[#1f453a] rounded-xl match-card-shadow">
-            {mapLocation ? (
+            {/* No pin, no map frame — the label below already says it's pending */}
+            {mapLocation && (
               <button
                 type="button"
                 className="w-full text-left"
@@ -265,10 +266,6 @@ export function MatchDetailView({
               >
                 <MatchLocationMap location={mapLocation} />
               </button>
-            ) : (
-              <div className="w-full h-36 bg-[#0f2d24] flex items-center justify-center text-xs text-gray-500">
-                {t('matches.mapUnavailable')}
-              </div>
             )}
             <div className="p-4 flex items-start gap-3">
               <span className="material-symbols-outlined text-[#d4f000] text-3xl select-none">
