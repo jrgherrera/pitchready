@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Loader2, MapPin } from 'lucide-react';
+import { Check, Loader2, MapPin, X } from 'lucide-react';
 import { useT } from '../../../i18n';
 import type { CreateMatchForm } from '../../../types';
 import { getLocationAddress, getLocationLabel } from '../../../utils/location';
@@ -95,6 +95,16 @@ export function CreateMatchModal({
                   </span>
                 )}
               </button>
+              {form.location && (
+                <button
+                  type="button"
+                  disabled={creating}
+                  onClick={() => onChange({ ...form, location: null })}
+                  className="text-[11px] font-bold uppercase tracking-wider text-red-400 hover:text-red-300 disabled:opacity-40 flex items-center gap-1 pt-0.5"
+                >
+                  <X className="w-3.5 h-3.5" /> {t('createMatch.removeLocation')}
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

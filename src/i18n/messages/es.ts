@@ -193,6 +193,7 @@ export const es: Messages = {
     matchNamePlaceholder: 'Miércoles bajo las luces',
     location: 'Ubicación',
     tapToChoose: 'Toca para elegir en el mapa',
+    removeLocation: 'Quitar ubicación',
     date: 'Fecha',
     time: 'Hora',
     totalPlayers: 'Jugadores totales',
