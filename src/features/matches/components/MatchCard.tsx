@@ -1,7 +1,7 @@
 import { MapPin, Share2 } from 'lucide-react';
 import { useI18n } from '../../../i18n';
 import type { MatchData, UserProfile } from '../../../types';
-import { formatMatchShortDate } from '../../../utils/dates';
+import { formatMatchShortDate, formatMatchTime } from '../../../utils/dates';
 import { getAvatarUrl } from '../../../utils/avatars';
 import { getLocationLabel } from '../../../utils/location';
 import { getCapacityPercent, getOccupiedCount, isMatchFull, shareMatchLink } from '../../../utils/matches';
@@ -9,6 +9,8 @@ import { getCapacityPercent, getOccupiedCount, isMatchFull, shareMatchLink } fro
 interface MatchCardProps {
   match: MatchData;
   players: UserProfile[];
+  /** Creator or active super admin — everyone else only gets to look */
+  canManage: boolean;
   onOpen: (matchId: string) => void;
   showShare?: boolean;
 }
@@ -16,6 +18,7 @@ interface MatchCardProps {
 export function MatchCard({
   match,
   players,
+  canManage,
   onOpen,
   showShare = true,
 }: MatchCardProps) {
@@ -38,7 +41,9 @@ export function MatchCard({
           <h3 className="font-anton text-lg text-white leading-tight mt-1">{match.title}</h3>
         </div>
         <div className="text-right">
-          <p className="font-anton text-xl text-[#d4f000] leading-none">{match.time}</p>
+          <p className="font-anton text-xl text-[#d4f000] leading-none">
+            {formatMatchTime(match.date, locale)}
+          </p>
           <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-wider">
             {formatMatchShortDate(match.date, locale)}
           </p>
@@ -102,7 +107,7 @@ export function MatchCard({
             onClick={() => onOpen(match.id)}
             className="px-4 py-1.5 bg-[#d4f000] hover:bg-[#b5cc00] text-[#001710] font-anton rounded-lg text-xs uppercase tracking-wider transition-all"
           >
-            {t('matches.manage')}
+            {canManage ? t('matches.manage') : t('matches.viewDetails')}
           </button>
         </div>
       </div>

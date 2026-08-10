@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Clock,
   Loader2,
+  Pencil,
   Trash2,
   UserPlus,
   Zap,
@@ -13,7 +14,11 @@ import {
 import { useI18n } from '../../../i18n';
 import type { MatchData, MatchLocation, SignUpStatus, UserProfile } from '../../../types';
 import { getAvatarUrl } from '../../../utils/avatars';
-import { formatMatchShortDate, formatMatchWeekday } from '../../../utils/dates';
+import {
+  formatMatchShortDate,
+  formatMatchTime,
+  formatMatchWeekday,
+} from '../../../utils/dates';
 import {
   getLocationAddress,
   getLocationCoords,
@@ -39,10 +44,12 @@ interface MatchDetailViewProps {
   profile: UserProfile;
   players: UserProfile[];
   signUpStatus: SignUpStatus;
+  canManage: boolean;
   onBack: () => void;
   onJoinLeave: (match: MatchData) => void;
   onAddGuest: (match: MatchData) => Promise<void>;
   onRemoveGuest: (match: MatchData, guestId: string) => Promise<void>;
+  onEdit: (match: MatchData) => void;
   onDelete: (matchId: string) => void;
 }
 
@@ -51,10 +58,12 @@ export function MatchDetailView({
   profile,
   players,
   signUpStatus,
+  canManage,
   onBack,
   onJoinLeave,
   onAddGuest,
   onRemoveGuest,
+  onEdit,
   onDelete,
 }: MatchDetailViewProps) {
   const { t, locale } = useI18n();
@@ -195,8 +204,7 @@ export function MatchDetailView({
                   {t('matches.kickOff')}
                 </p>
                 <p className="font-anton text-2xl text-white">
-                  {match.time}{' '}
-                  <span className="font-archivo text-base">{t('matches.pm')}</span>
+                  {formatMatchTime(match.date, locale)}
                 </p>
               </div>
               <div className="text-right">
@@ -582,11 +590,21 @@ export function MatchDetailView({
               <Check className="w-5 h-5 text-[#d4f000] shrink-0 mt-0.5" />
               <p className="text-sm text-gray-300">{t('matches.rule2')}</p>
             </li>
+            <li className="flex items-start gap-3">
+              <Check className="w-5 h-5 text-[#d4f000] shrink-0 mt-0.5" />
+              <p className="text-sm text-gray-300">{t('matches.rule3')}</p>
+            </li>
           </ul>
         </section>
 
-        {(match.creatorId === profile.id || profile.admin) && (
-          <div className="px-4 mb-12">
+        {canManage && (
+          <div className="px-4 mb-12 space-y-3">
+            <button
+              onClick={() => onEdit(match)}
+              className="w-full bg-[#0f2d24] hover:bg-[#1f453a] text-[#d4f000] border border-[#1f453a] font-anton py-3.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+            >
+              <Pencil className="w-4 h-4" /> {t('matches.editMatch')}
+            </button>
             <button
               onClick={() => onDelete(match.id)}
               className="w-full bg-red-950/40 hover:bg-red-900/50 text-red-400 border border-red-900/60 font-anton py-3.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-2"
@@ -599,12 +617,19 @@ export function MatchDetailView({
 
       <footer className="fixed bottom-0 left-0 w-full bg-[#0a1c17] border-t-4 border-[#d4f000] p-4 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.4)]">
         <div className="max-w-md mx-auto flex items-center justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <p className="text-gray-400 text-[10px] uppercase tracking-widest">
               {t('matches.playerFee')}
             </p>
-            <p className="font-anton text-2xl text-white">
-              £{match.price ? match.price.toFixed(2) : '2000.00'}
+            {/* The fallback wording is far longer than a price — let it shrink instead of shoving the CTA */}
+            <p
+              className={`font-anton text-white ${
+                match.price == null ? 'text-[clamp(0.75rem,3.5vw,1.5rem)] leading-tight' : 'text-2xl'
+              }`}
+            >
+              {match.price == null
+                ? t('matches.priceUndefined')
+                : `₡${match.price.toLocaleString('en-US')}`}
             </p>
           </div>
 

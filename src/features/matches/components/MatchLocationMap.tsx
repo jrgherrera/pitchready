@@ -51,5 +51,6 @@ export function MatchLocationMap({ location, className = 'h-36' }: MatchLocation
     };
   }, [location.lat, location.lng]);
 
-  return <div ref={hostRef} className={`w-full bg-[#0f2d24] ${className}`} />;
+  // `isolate` traps Leaflet's z-index 400+ panes so they can't paint over the nav
+  return <div ref={hostRef} className={`w-full bg-[#0f2d24] isolate ${className}`} />;
 }

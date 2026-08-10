@@ -3,17 +3,22 @@ import { RoleSelect } from '../../../components/ui/RoleSelect';
 import { useI18n, type LocalePreference } from '../../../i18n';
 import type { PlayerRole, UserProfile } from '../../../types';
 import { getAvatarUrl } from '../../../utils/avatars';
+import { isSuperAdmin } from '../../../utils/matches';
 
 interface SettingsTabProps {
   profile: UserProfile;
+  superAdminMode: boolean;
   onProfileChange: (profile: UserProfile) => void;
+  onSuperAdminModeChange: (enabled: boolean) => void;
   onSave: (e: React.FormEvent) => void;
   onLogout: () => void;
 }
 
 export function SettingsTab({
   profile,
+  superAdminMode,
   onProfileChange,
+  onSuperAdminModeChange,
   onSave,
   onLogout,
 }: SettingsTabProps) {
@@ -96,6 +101,25 @@ export function SettingsTab({
           {t('settings.saveChanges')}
         </button>
       </form>
+
+      {isSuperAdmin(profile) && (
+        <label className="bg-[#0a1c17] border border-[#1f453a] p-5 rounded-xl flex items-center justify-between gap-4 cursor-pointer match-card-shadow">
+          <span className="min-w-0">
+            <span className="text-xs font-bold uppercase text-gray-400 block">
+              {t('settings.superAdminMode')}
+            </span>
+            <span className="text-xs text-gray-500 mt-0.5 block">
+              {t('settings.superAdminModeHint')}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={superAdminMode}
+            onChange={(e) => onSuperAdminModeChange(e.target.checked)}
+            className="w-5 h-5 shrink-0 accent-[#d4f000]"
+          />
+        </label>
+      )}
 
       <div className="space-y-3">
         <button

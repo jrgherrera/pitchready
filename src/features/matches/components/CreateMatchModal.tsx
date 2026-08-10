@@ -8,6 +8,8 @@ import { LocationPickerModal } from './LocationPickerModal';
 interface CreateMatchModalProps {
   form: CreateMatchForm;
   creating: boolean;
+  /** Same form, editing an existing match — only the wording changes */
+  editing?: boolean;
   onChange: (form: CreateMatchForm) => void;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -16,6 +18,7 @@ interface CreateMatchModalProps {
 export function CreateMatchModal({
   form,
   creating,
+  editing = false,
   onChange,
   onClose,
   onSubmit,
@@ -38,7 +41,7 @@ export function CreateMatchModal({
 
           <div className="flex justify-between items-center">
             <h2 className="font-anton text-2xl text-[#d4f000] uppercase tracking-wider">
-              {t('createMatch.title')}
+              {editing ? t('createMatch.editTitle') : t('createMatch.title')}
             </h2>
             <button
               onClick={onClose}
@@ -92,14 +95,6 @@ export function CreateMatchModal({
                   </span>
                 )}
               </button>
-              {/* Required for HTML5 validation — hidden mirror of map selection */}
-              <input
-                tabIndex={-1}
-                className="sr-only"
-                required
-                value={form.location ? `${form.location.lat},${form.location.lng}` : ''}
-                onChange={() => undefined}
-              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -169,28 +164,31 @@ export function CreateMatchModal({
               <input
                 type="number"
                 placeholder="2000"
-                step="0.5"
+                step="100"
                 min="0"
                 className="w-full p-3 bg-[#020f0b] border border-[#1f453a] text-white focus:border-[#d4f000] rounded-lg text-sm transition-all"
-                required
                 disabled={creating}
                 value={form.price}
-                onChange={(e) => onChange({ ...form, price: Number(e.target.value) })}
+                onChange={(e) =>
+                  onChange({ ...form, price: e.target.value === '' ? '' : Number(e.target.value) })
+                }
               />
             </div>
 
             <button
               type="submit"
-              disabled={creating || !form.location}
+              disabled={creating}
               className="w-full bg-[#d4f000] hover:bg-[#b0c800] text-[#001710] font-anton py-4 rounded-xl uppercase tracking-wider text-base transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#d4f000]/10 disabled:opacity-80"
             >
             {creating ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" /> {t('createMatch.publishing')}
+                <Loader2 className="w-5 h-5 animate-spin" />{' '}
+                {editing ? t('createMatch.saving') : t('createMatch.publishing')}
               </>
             ) : (
                 <>
-                  {t('createMatch.publish')} <Check className="w-5 h-5 stroke-[3]" />
+                  {editing ? t('createMatch.save') : t('createMatch.publish')}{' '}
+                  <Check className="w-5 h-5 stroke-[3]" />
                 </>
               )}
             </button>
