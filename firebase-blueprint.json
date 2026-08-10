@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The user ID matching Firebase Auth UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the player"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile picture URL"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["Captain", "Striker", "Midfield", "Keeper", "Defender"],
+          "description": "Preferred position or role"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Details of a soccer match",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the match"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "date": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "capacity": {
+          "type": "integer"
+        },
+        "duration": {
+          "type": "integer"
+        },
+        "price": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["needs_players", "confirmed", "cancelled"]
+        },
+        "isSpecial": {
+          "type": "boolean"
+        },
+        "joinedPlayerIds": {
+          "type": "array"
+        },
+        "creatorId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "date", "time", "location", "capacity", "creatorId"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection indexed by uid"
+    },
+    "matches/{matchId}": {
+      "schema": "Match",
+      "description": "Match details collection indexed by matchId"
+    }
+  }
+}

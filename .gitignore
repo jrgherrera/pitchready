@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+server.js
+
+# Local tooling caches
+.firebase/
+.codegraph/
+
+# Environment (secrets / local config)
+.env
+.env.local
+.env.*.local
+
+# Service account keys — never commit
+sa-key.json
+*-key.json
+*serviceaccount*.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
