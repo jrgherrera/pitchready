@@ -7,7 +7,7 @@ export const INITIAL_CREATE_FORM: CreateMatchForm = {
   time: '',
   capacity: 10,
   duration: 60,
-  price: 2000,
+  price: '',
 };
 
 export const LOGIN_HERO_IMAGE =

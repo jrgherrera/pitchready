@@ -1,7 +1,7 @@
 import { MapPin } from 'lucide-react';
 import { useI18n } from '../../../i18n';
 import type { MatchData } from '../../../types';
-import { formatMatchShortDate } from '../../../utils/dates';
+import { formatMatchShortDate, formatMatchTime } from '../../../utils/dates';
 import { getLocationLabel } from '../../../utils/location';
 import { getCapacityPercent, getOccupiedCount, isMatchFull } from '../../../utils/matches';
 
@@ -32,7 +32,9 @@ export function MatchListCard({ match, onOpen }: MatchListCardProps) {
           <h3 className="font-anton text-lg text-white mt-1.5">{match.title}</h3>
         </div>
         <div className="text-right">
-          <p className="font-anton text-xl text-[#d4f000] leading-none">{match.time}</p>
+          <p className="font-anton text-xl text-[#d4f000] leading-none">
+            {formatMatchTime(match.date, locale)}
+          </p>
           <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider">
             {formatMatchShortDate(match.date, locale)}
           </p>
@@ -64,7 +66,7 @@ export function MatchListCard({ match, onOpen }: MatchListCardProps) {
 
       <div className="flex items-center justify-between border-t border-[#1f453a] pt-3 mt-3">
         <span className="text-sm font-anton text-white">
-          £{match.price?.toFixed(2) || '2000.00'}
+          {match.price == null ? '—' : `₡${match.price.toLocaleString('en-US')}`}
         </span>
         <button
           onClick={() => onOpen(match.id)}

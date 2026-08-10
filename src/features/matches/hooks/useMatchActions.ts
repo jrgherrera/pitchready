@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { useT } from '../../../i18n';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, SignUpStatus, UserProfile } from '../../../types';
@@ -7,6 +7,7 @@ import {
   getOccupiedCount,
   isMatchFull,
   isWaitlistFull,
+  matchToForm,
   promoteFromWaitlist,
 } from '../../../utils/matches';
 import { INITIAL_CREATE_FORM } from '../constants';
@@ -20,15 +21,12 @@ export function useMatchActions(
   const [creatingMatch, setCreatingMatch] = useState(false);
   const [signUpStatus, setSignUpStatus] = useState<SignUpStatus>('idle');
   const [createForm, setCreateForm] = useState<CreateMatchForm>(INITIAL_CREATE_FORM);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
 
   const createMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile?.admin) {
       alert(t('matches.onlyAdmins'));
-      return;
-    }
-    if (!createForm.location) {
-      alert(t('matches.pickLocation'));
       return;
     }
 
@@ -37,16 +35,15 @@ export function useMatchActions(
     const matchDocRef = doc(db, 'matches', newMatchId);
 
     const capacity = Math.max(2, Number(createForm.capacity) || 10);
+    const day = createForm.date || new Date().toISOString().split('T')[0];
 
     const matchPayload: MatchData = {
       id: newMatchId,
       title: createForm.title || t('matches.defaultTitle'),
-      date: createForm.date || new Date().toISOString().split('T')[0],
-      time: createForm.time || '19:00',
-      location: createForm.location,
+      // Local kick-off instant; Firestore stores a Date as a Timestamp
+      date: new Date(`${day}T${createForm.time || '19:00'}`),
       capacity,
       duration: Number(createForm.duration),
-      price: Number(createForm.price),
       status: 'needs_players',
       joinedPlayerIds: [profile.id],
       waitlistPlayerIds: [],
@@ -54,6 +51,9 @@ export function useMatchActions(
       creatorId: profile.id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      // Both optional — omit rather than write null, the host can add them later
+      ...(createForm.location ? { location: createForm.location } : {}),
+      ...(createForm.price === '' ? {} : { price: Number(createForm.price) }),
     };
 
     try {
@@ -62,6 +62,43 @@ export function useMatchActions(
       onMatchCreated?.(newMatchId);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `matches/${newMatchId}`);
+    } finally {
+      setCreatingMatch(false);
+    }
+  };
+
+  const startEditMatch = (match: MatchData) => {
+    setCreateForm(matchToForm(match));
+    setEditingMatchId(match.id);
+  };
+
+  const cancelEditMatch = () => {
+    setEditingMatchId(null);
+    setCreateForm(INITIAL_CREATE_FORM);
+  };
+
+  /** Only the details — roster, creator and timestamps are left alone. */
+  const updateMatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMatchId) return;
+
+    setCreatingMatch(true);
+    const day = createForm.date || new Date().toISOString().split('T')[0];
+
+    try {
+      await updateDoc(doc(db, 'matches', editingMatchId), {
+        title: createForm.title || t('matches.defaultTitle'),
+        date: new Date(`${day}T${createForm.time || '19:00'}`),
+        capacity: Math.max(2, Number(createForm.capacity) || 10),
+        duration: Number(createForm.duration),
+        // Clearing the fee removes it; a legacy string location stays put when none is picked
+        price: createForm.price === '' ? deleteField() : Number(createForm.price),
+        updatedAt: new Date().toISOString(),
+        ...(createForm.location ? { location: createForm.location } : {}),
+      });
+      cancelEditMatch();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `matches/${editingMatchId}`);
     } finally {
       setCreatingMatch(false);
     }
@@ -213,6 +250,10 @@ export function useMatchActions(
     creatingMatch,
     signUpStatus,
     createMatch,
+    editingMatchId,
+    startEditMatch,
+    cancelEditMatch,
+    updateMatch,
     deleteMatch,
     joinOrLeaveMatch,
     addGuestPlusOne,

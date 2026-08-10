@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppHeader, BottomNav } from './components/layout/AppShell';
 import { LoadingScreen } from './components/ui/LoadingScreen';
 import { ForgotPasswordForm } from './features/auth/components/ForgotPasswordForm';
@@ -15,7 +15,13 @@ import { useMatches } from './features/matches/hooks/useMatches';
 import { PlayersTab } from './features/players/components/PlayersTab';
 import { usePlayers } from './features/players/hooks/usePlayers';
 import { SettingsTab } from './features/settings/components/SettingsTab';
-import type { AppTab } from './types';
+import type { AppTab, MatchData } from './types';
+import {
+  canManageMatch,
+  getStoredSuperAdminMode,
+  matchIdFromPath,
+  storeSuperAdminMode,
+} from './utils/matches';
 
 type AuthView = 'login' | 'forgot-password';
 
@@ -47,8 +53,20 @@ export default function App() {
 
   const [authView, setAuthView] = useState<AuthView>('login');
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  // Shared links land on /match/<id> (hosting rewrites it to index.html)
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(
+    () => matchIdFromPath(window.location.pathname),
+  );
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [superAdminMode, setSuperAdminMode] = useState(getStoredSuperAdminMode);
+
+  // Keep the address bar on the open match so a refresh or a copied URL lands back here
+  useEffect(() => {
+    const path = activeMatchId ? `/match/${activeMatchId}` : '/';
+    if (window.location.pathname !== path) {
+      window.history.replaceState(null, '', path);
+    }
+  }, [activeMatchId]);
 
   const {
     createForm,
@@ -56,6 +74,10 @@ export default function App() {
     creatingMatch,
     signUpStatus,
     createMatch,
+    editingMatchId,
+    startEditMatch,
+    cancelEditMatch,
+    updateMatch,
     deleteMatch,
     joinOrLeaveMatch,
     addGuestPlusOne,
@@ -153,20 +175,36 @@ export default function App() {
   }
 
   const activeMatch = matches.find((m) => m.id === activeMatchId);
+  const canManage = (match: MatchData) => canManageMatch(match, profile, superAdminMode);
 
   if (activeMatchId && activeMatch) {
     return (
-      <MatchDetailView
-        match={activeMatch}
-        profile={profile}
-        players={allPlayers}
-        signUpStatus={signUpStatus}
-        onBack={() => setActiveMatchId(null)}
-        onJoinLeave={joinOrLeaveMatch}
-        onAddGuest={addGuestPlusOne}
-        onRemoveGuest={removeGuestPlusOne}
-        onDelete={deleteMatch}
-      />
+      <>
+        <MatchDetailView
+          match={activeMatch}
+          profile={profile}
+          players={allPlayers}
+          signUpStatus={signUpStatus}
+          canManage={canManage(activeMatch)}
+          onBack={() => setActiveMatchId(null)}
+          onJoinLeave={joinOrLeaveMatch}
+          onAddGuest={addGuestPlusOne}
+          onRemoveGuest={removeGuestPlusOne}
+          onEdit={startEditMatch}
+          onDelete={deleteMatch}
+        />
+
+        {editingMatchId && (
+          <CreateMatchModal
+            form={createForm}
+            creating={creatingMatch}
+            editing
+            onChange={setCreateForm}
+            onClose={cancelEditMatch}
+            onSubmit={updateMatch}
+          />
+        )}
+      </>
     );
   }
 
@@ -186,6 +224,7 @@ export default function App() {
             matchesLoading={matchesLoading}
             players={allPlayers}
             canHostMatches={Boolean(profile.admin)}
+            canManage={canManage}
             onOpenMatch={setActiveMatchId}
             onCreateMatch={() => setShowCreateModal(true)}
             onViewAllMatches={() => changeTab('matches')}
@@ -209,7 +248,12 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsTab
             profile={profile}
+            superAdminMode={superAdminMode}
             onProfileChange={setProfile}
+            onSuperAdminModeChange={(enabled) => {
+              storeSuperAdminMode(enabled);
+              setSuperAdminMode(enabled);
+            }}
             onSave={(e) => {
               e.preventDefault();
               void updateUserProfile(profile);

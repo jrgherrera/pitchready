@@ -1,9 +1,56 @@
 import { t } from '../i18n';
-import type { MatchData, MatchGuest, PlayerRole, UserProfile } from '../types';
+import type { CreateMatchForm, MatchData, MatchGuest, PlayerRole, UserProfile } from '../types';
 import { getAvatarUrl } from './avatars';
+import { toDateTimeInputs } from './dates';
 
 /** Extra hold / waitlist spots beyond match capacity */
 export const WAITLIST_SLOTS = 4;
+
+/** Can edit or delete any match — mirrored in firestore.rules, keep both in sync */
+export const SUPER_ADMIN_EMAIL = 'jrgherrera@gmail.com';
+
+const SUPER_ADMIN_MODE_KEY = 'pitchready.superAdminMode';
+
+export function isSuperAdmin(profile: UserProfile) {
+  return profile.email === SUPER_ADMIN_EMAIL;
+}
+
+/** Super-admin powers are on unless explicitly switched off. Local preference only. */
+export function getStoredSuperAdminMode() {
+  return localStorage.getItem(SUPER_ADMIN_MODE_KEY) !== 'off';
+}
+
+export function storeSuperAdminMode(enabled: boolean) {
+  localStorage.setItem(SUPER_ADMIN_MODE_KEY, enabled ? 'on' : 'off');
+}
+
+/**
+ * Editing a match (details, deletion) is the creator's and the super admin's alone.
+ * `superAdminMode` is a local view preference — firestore.rules still grants the
+ * super admin write access regardless.
+ */
+export function canManageMatch(
+  match: MatchData,
+  profile: UserProfile,
+  superAdminMode: boolean,
+) {
+  return match.creatorId === profile.id || (superAdminMode && isSuperAdmin(profile));
+}
+
+/** Existing match back into the create/edit form shape. */
+export function matchToForm(match: MatchData): CreateMatchForm {
+  const { day, time } = toDateTimeInputs(match.date);
+  return {
+    title: match.title,
+    // Legacy string locations have no coords to re-pin; the save path leaves them untouched
+    location: typeof match.location === 'object' ? match.location : null,
+    date: day,
+    time,
+    capacity: match.capacity,
+    duration: match.duration ?? 60,
+    price: match.price ?? '',
+  };
+}
 
 export type RosterEntry =
   | {
@@ -156,6 +203,11 @@ export function resolveWaitlist(
       photoUserId: id,
     };
   });
+}
+
+/** '/match/<id>' → the id, for links opened cold. */
+export function matchIdFromPath(pathname: string): string | null {
+  return pathname.match(/^\/match\/([a-zA-Z0-9_-]+)\/?$/)?.[1] ?? null;
 }
 
 export function shareMatchLink(matchId: string) {

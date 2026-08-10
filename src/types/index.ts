@@ -39,10 +39,10 @@ export interface MatchGuest {
 export interface MatchData {
   id: string;
   title: string;
-  date: string;
-  time: string;
-  /** Map-selected location (object). Legacy docs may still store a string. */
-  location: MatchLocation | string;
+  /** Kick-off instant (date + time) — stored in Firestore as a Timestamp */
+  date: Date;
+  /** Map-selected location (object), set later if the host skipped it. Legacy docs may still store a string. */
+  location?: MatchLocation | string;
   capacity: number;
   duration?: number;
   price?: number;
@@ -64,5 +64,6 @@ export interface CreateMatchForm {
   time: string;
   capacity: number;
   duration: number;
-  price: number;
+  /** '' while the host leaves the fee blank */
+  price: number | '';
 }

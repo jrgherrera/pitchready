@@ -9,6 +9,7 @@ interface DashboardTabProps {
   matchesLoading: boolean;
   players: UserProfile[];
   canHostMatches: boolean;
+  canManage: (match: MatchData) => boolean;
   onOpenMatch: (matchId: string) => void;
   onCreateMatch: () => void;
   onViewAllMatches: () => void;
@@ -19,6 +20,7 @@ export function DashboardTab({
   matchesLoading,
   players,
   canHostMatches,
+  canManage,
   onOpenMatch,
   onCreateMatch,
   onViewAllMatches,
@@ -98,6 +100,7 @@ export function DashboardTab({
                 key={match.id}
                 match={match}
                 players={players}
+                canManage={canManage(match)}
                 onOpen={onOpenMatch}
               />
             ))}
