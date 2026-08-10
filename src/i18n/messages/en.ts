@@ -192,6 +192,7 @@ const enCatalog = {
     matchNamePlaceholder: 'Wednesday Night Lights',
     location: 'Location',
     tapToChoose: 'Tap to choose on map',
+    removeLocation: 'Remove location',
     date: 'Date',
     time: 'Time',
     totalPlayers: 'Total Players',

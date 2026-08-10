@@ -91,10 +91,11 @@ export function useMatchActions(
         date: new Date(`${day}T${createForm.time || '19:00'}`),
         capacity: Math.max(2, Number(createForm.capacity) || 10),
         duration: Number(createForm.duration),
-        // Clearing the fee removes it; a legacy string location stays put when none is picked
+        // Cleared fields are removed outright. A legacy string location reaches the form as
+        // null (the picker can't show it), so saving an edit drops it — pick one to replace it.
         price: createForm.price === '' ? deleteField() : Number(createForm.price),
+        location: createForm.location ?? deleteField(),
         updatedAt: new Date().toISOString(),
-        ...(createForm.location ? { location: createForm.location } : {}),
       });
       cancelEditMatch();
     } catch (error) {
