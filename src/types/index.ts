@@ -52,6 +52,8 @@ export interface MatchData {
   waitlistPlayerIds?: string[];
   /** Guests (+1s) brought by signed-up players */
   guests?: MatchGuest[];
+  /** Team draft by the host — Firestore has no nested arrays, so each team is a map of roster ids */
+  teams?: { members: string[] }[];
   creatorId: string;
   createdAt?: string;
   updatedAt?: string;

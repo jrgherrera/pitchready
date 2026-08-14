@@ -245,6 +245,19 @@ export function useMatchActions(
     }
   };
 
+  /** Host-only — firestore.rules rejects this write for anyone but the match owner. */
+  const saveTeams = async (match: MatchData, teams: string[][]) => {
+    if (!profile) return;
+    try {
+      await updateDoc(doc(db, 'matches', match.id), {
+        teams: teams.map((members) => ({ members })),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+    }
+  };
+
   return {
     createForm,
     setCreateForm,
@@ -259,5 +272,6 @@ export function useMatchActions(
     joinOrLeaveMatch,
     addGuestPlusOne,
     removeGuestPlusOne,
+    saveTeams,
   };
 }

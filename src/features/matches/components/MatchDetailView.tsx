@@ -38,6 +38,7 @@ import { MATCH_HERO_IMAGE } from '../constants';
 import { AddPlusOneModal } from './AddPlusOneModal';
 import { MatchLocationMap } from './MatchLocationMap';
 import { RemoveGuestModal } from './RemoveGuestModal';
+import { TeamsSection } from './TeamsSection';
 
 interface MatchDetailViewProps {
   match: MatchData;
@@ -49,6 +50,7 @@ interface MatchDetailViewProps {
   onJoinLeave: (match: MatchData) => void;
   onAddGuest: (match: MatchData) => Promise<void>;
   onRemoveGuest: (match: MatchData, guestId: string) => Promise<void>;
+  onSaveTeams: (match: MatchData, teams: string[][]) => Promise<void>;
   onEdit: (match: MatchData) => void;
   onDelete: (matchId: string) => void;
 }
@@ -63,6 +65,7 @@ export function MatchDetailView({
   onJoinLeave,
   onAddGuest,
   onRemoveGuest,
+  onSaveTeams,
   onEdit,
   onDelete,
 }: MatchDetailViewProps) {
@@ -573,6 +576,13 @@ export function MatchDetailView({
             </div>
           )}
         </section>
+
+        <TeamsSection
+          roster={roster}
+          savedTeams={match.teams}
+          canManage={canManage}
+          onSave={(teams) => onSaveTeams(match, teams)}
+        />
 
         <section className="mt-6 px-4 mb-8">
           <h2 className="font-anton text-lg tracking-wide uppercase text-[#d4f000] mb-3">
