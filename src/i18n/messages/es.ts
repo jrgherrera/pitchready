@@ -185,6 +185,13 @@ export const es: Messages = {
     locationTbd: 'Ubicación por definir',
     selectedLocation: 'Ubicación seleccionada',
     priceUndefined: 'Precio por definir',
+    teamsTitle: 'Armar equipos',
+    teamsCount: 'Equipos',
+    teamsHint:
+      'Equilibrados por posición: un portero por equipo mientras alcancen, y luego defensa, medio y ataque repartidos parejo.',
+    generateTeams: 'Armar equipos',
+    regenerateTeams: 'Volver a armar',
+    teamName: 'Equipo {{n}}',
   },
   createMatch: {
     title: 'Programar partido',

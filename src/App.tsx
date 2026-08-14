@@ -82,6 +82,7 @@ export default function App() {
     joinOrLeaveMatch,
     addGuestPlusOne,
     removeGuestPlusOne,
+    saveTeams,
   } = useMatchActions(
     profile,
     (matchId) => {
@@ -190,6 +191,7 @@ export default function App() {
           onJoinLeave={joinOrLeaveMatch}
           onAddGuest={addGuestPlusOne}
           onRemoveGuest={removeGuestPlusOne}
+          onSaveTeams={saveTeams}
           onEdit={startEditMatch}
           onDelete={deleteMatch}
         />

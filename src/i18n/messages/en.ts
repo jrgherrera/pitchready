@@ -184,6 +184,13 @@ const enCatalog = {
     locationTbd: 'Location TBD',
     selectedLocation: 'Selected location',
     priceUndefined: 'Fee to be determined',
+    teamsTitle: 'Team Draft',
+    teamsCount: 'Teams',
+    teamsHint:
+      'Balanced by position — a keeper each while they last, then defense, midfield and attack split evenly.',
+    generateTeams: 'Draw Teams',
+    regenerateTeams: 'Draw Again',
+    teamName: 'Team {{n}}',
   },
   createMatch: {
     title: 'Schedule Match',
