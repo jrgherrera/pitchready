@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
 import { parseLegacyDate, planBackfill, previewDiffers } from './backfill-matches';
 
 const users = {

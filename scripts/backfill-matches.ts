@@ -1,11 +1,16 @@
 /**
  * One-off backfill for matches created before matches became private by membership.
- * Run once per environment, as the super admin (the rules grant them every match):
+ * Run once per environment with the Firebase Admin SDK, which authenticates with a service-account
+ * key and bypasses the Firestore rules:
  *
- *   BACKFILL_PASSWORD=... npx tsx scripts/backfill-matches.ts
+ *   GOOGLE_APPLICATION_CREDENTIALS=path/to/sa-key.json npx tsx scripts/backfill-matches.ts
  *
- * Reads the Firebase web config from .env (same VITE_* keys the app uses); BACKFILL_EMAIL
- * defaults to the super admin. Idempotent: a match that needs nothing is reported as skipped.
+ * The key comes from Firebase console > Project settings > Service accounts > Generate new private
+ * key (keep it out of git; sa-key.json and *-key.json are ignored). VITE_FIREBASE_FIRESTORE_DATABASE_ID
+ * in .env selects a non-default database. Idempotent: a match that needs nothing is reported as skipped.
+ *
+ * Rules do not apply here, so memberIds must always come from computeMemberIds: a document whose
+ * memberIds disagrees with its arrays would be rejected on every later client write.
  *
  * Per match it fills what is missing: memberIds (computeMemberIds), creatorName and roster
  * (from users/{id}, which is being deleted), converts a legacy 'YYYY-MM-DD' string date to a
@@ -17,22 +22,13 @@
  * age out as they become past matches. Matches created from Task 3 on have unguessable ids.
  */
 import 'dotenv/config';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  initializeFirestore,
-  Timestamp,
-  writeBatch,
-  type DocumentData,
-} from 'firebase/firestore';
+import { cert, initializeApp } from 'firebase-admin/app';
+import { getFirestore, Timestamp, type DocumentData } from 'firebase-admin/firestore';
+import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import type { MatchData, MatchPreview, RosterMember, UserProfile } from '../src/types';
-import { computeMemberIds, rosterEntryFor, SUPER_ADMIN_EMAIL } from '../src/utils/matches';
+import { computeMemberIds, rosterEntryFor } from '../src/utils/matches';
 import { toPreview } from '../src/utils/matchPreview';
 
 type Names = Record<string, Pick<UserProfile, 'id' | 'name' | 'role' | 'photoURL'>>;
@@ -130,31 +126,28 @@ export function planBackfill(id: string, data: DocumentData, users: Names) {
 }
 
 async function main() {
-  const env = process.env;
-  const password = env.BACKFILL_PASSWORD;
-  if (!password) throw new Error('Set BACKFILL_PASSWORD (password of the super admin account).');
-  const app = initializeApp({
-    apiKey: env.VITE_FIREBASE_API_KEY,
-    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: env.VITE_FIREBASE_APP_ID,
-  });
-  const dbId = env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
-  const db = dbId && dbId !== '(default)' ? initializeFirestore(app, {}, dbId) : initializeFirestore(app, {});
-  await signInWithEmailAndPassword(getAuth(app), env.BACKFILL_EMAIL ?? SUPER_ADMIN_EMAIL, password);
+  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!keyPath) throw new Error('Set GOOGLE_APPLICATION_CREDENTIALS to the path of the service-account key JSON.');
+  let key;
+  try {
+    key = JSON.parse(readFileSync(keyPath, 'utf8'));
+  } catch (e) {
+    throw new Error(`Cannot read the service-account key at GOOGLE_APPLICATION_CREDENTIALS (${keyPath}): ${(e as Error).message}`);
+  }
+  const app = initializeApp({ credential: cert(key) });
+  const dbId = process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+  const db = dbId && dbId !== '(default)' ? getFirestore(app, dbId) : getFirestore(app);
 
   const userCache = new Map<string, Names[string] | null>();
   async function loadUser(uid: string) {
     if (!userCache.has(uid)) {
-      const s = await getDoc(doc(db, 'users', uid));
-      userCache.set(uid, s.exists() ? ({ id: uid, ...s.data() } as Names[string]) : null);
+      const s = await db.collection('users').doc(uid).get();
+      userCache.set(uid, s.exists ? ({ id: uid, ...s.data() } as Names[string]) : null);
     }
     return userCache.get(uid)!;
   }
 
-  const snap = await getDocs(collection(db, 'matches'));
+  const snap = await db.collection('matches').get();
   if (snap.empty) {
     // A denied or empty listing is indistinguishable from "done" otherwise; the database is not empty.
     console.error('FOUND ZERO MATCHES. Treating as an error (denied listing? wrong database?), not as a finished migration.');
@@ -172,8 +165,8 @@ async function main() {
         if (u) users[uid] = u;
       }
       const plan = planBackfill(d.id, data, users);
-      const previewRef = doc(db, 'matchPreviews', d.id);
-      const existingPreview = (await getDoc(previewRef)).data();
+      const previewRef = db.collection('matchPreviews').doc(d.id);
+      const existingPreview = (await previewRef.get()).data();
       const detail = plan.unresolved.map((w) => '\n    - ' + w).join('');
 
       // Skip only when every field this script writes is already right, preview included.
@@ -182,7 +175,7 @@ async function main() {
       const patchKeys = Object.keys(plan.patch);
       const writePreview = plan.preview !== null && previewDiffers(existingPreview, plan.preview);
       if (patchKeys.length > 0 || writePreview) {
-        const batch = writeBatch(db);
+        const batch = db.batch();
         if (patchKeys.length > 0) batch.update(d.ref, plan.patch);
         if (writePreview) batch.set(previewRef, plan.preview!);
         await batch.commit();
