@@ -1,6 +1,6 @@
 import { MapPin, Share2 } from 'lucide-react';
 import { useI18n } from '../../../i18n';
-import type { MatchData, UserProfile } from '../../../types';
+import type { MatchData } from '../../../types';
 import { formatMatchShortDate, formatMatchTime } from '../../../utils/dates';
 import { getAvatarUrl } from '../../../utils/avatars';
 import { getLocationLabel } from '../../../utils/location';
@@ -8,7 +8,6 @@ import { getCapacityPercent, getOccupiedCount, isMatchFull, shareMatchLink } fro
 
 interface MatchCardProps {
   match: MatchData;
-  players: UserProfile[];
   /** Creator or active super admin — everyone else only gets to look */
   canManage: boolean;
   onOpen: (matchId: string) => void;
@@ -17,7 +16,6 @@ interface MatchCardProps {
 
 export function MatchCard({
   match,
-  players,
   canManage,
   onOpen,
   showShare = true,
@@ -76,7 +74,7 @@ export function MatchCard({
       <div className="flex items-center justify-between border-t border-[#1f453a] pt-3 mt-1">
         <div className="flex -space-x-1.5 overflow-hidden">
           {match.joinedPlayerIds.slice(0, 4).map((pid, pidx) => {
-            const foundPlayer = players.find((p) => p.id === pid);
+            const foundPlayer = match.roster?.[pid];
             return (
                 <img
                   key={pidx}

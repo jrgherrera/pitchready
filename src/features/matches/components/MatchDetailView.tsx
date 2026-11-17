@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Award,
@@ -12,6 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useI18n } from '../../../i18n';
+import { refreshOwnRosterEntry } from '../api/matchWrites';
 import type { MatchData, MatchLocation, SignUpStatus, UserProfile } from '../../../types';
 import { getAvatarUrl } from '../../../utils/avatars';
 import {
@@ -43,7 +44,6 @@ import { TeamsSection } from './TeamsSection';
 interface MatchDetailViewProps {
   match: MatchData;
   profile: UserProfile;
-  players: UserProfile[];
   signUpStatus: SignUpStatus;
   canManage: boolean;
   onBack: () => void;
@@ -58,7 +58,6 @@ interface MatchDetailViewProps {
 export function MatchDetailView({
   match,
   profile,
-  players,
   signUpStatus,
   canManage,
   onBack,
@@ -81,14 +80,20 @@ export function MatchDetailView({
   } | null>(null);
   const [removingGuest, setRemovingGuest] = useState(false);
 
+
+  // Names age: let a renamed member's own roster entry catch up when they open the match
+  useEffect(() => {
+    if (match.memberIds?.includes(profile.id)) void refreshOwnRosterEntry(match, profile);
+  }, [match.id]);
+
   const isPlayerInRoster = match.joinedPlayerIds.includes(profile.id);
   const isOnWaitlist = (match.waitlistPlayerIds ?? []).includes(profile.id);
   const occupied = getOccupiedCount(match);
   const capacityPercentage = getCapacityPercent(match);
   const spotsLeft = getSpotsLeft(match);
   const waitlistSpotsLeft = getWaitlistSpotsLeft(match);
-  const roster = resolveRoster(match, players);
-  const waitlist = resolveWaitlist(match, players);
+  const roster = resolveRoster(match);
+  const waitlist = resolveWaitlist(match);
   const heroImage = MATCH_HERO_IMAGE;
   const locationLabel = getLocationLabel(match.location);
   const locationAddress = getLocationAddress(match.location);
@@ -153,7 +158,7 @@ export function MatchDetailView({
 
   const removeHost =
     guestToRemove &&
-    (players.find((p) => p.id === guestToRemove.addedBy) || {
+    ((match.roster?.[guestToRemove.addedBy] && { id: guestToRemove.addedBy, ...match.roster[guestToRemove.addedBy] }) || {
       id: guestToRemove.addedBy,
       name: t('common.player'),
       photoURL: guestToRemove.photoURL,
@@ -485,7 +490,7 @@ export function MatchDetailView({
                           {entry.kind === 'guest'
                             ? t('matches.plusOneFor', {
                                 name:
-                                  players.find((p) => p.id === entry.addedBy)?.name ||
+                                  match.roster?.[entry.addedBy]?.name ||
                                   t('common.player'),
                               })
                             : entry.email || t('matches.privateEmail')}

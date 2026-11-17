@@ -13,9 +13,7 @@ import { DashboardTab } from './features/matches/components/DashboardTab';
 import { MatchDetailView } from './features/matches/components/MatchDetailView';
 import { MatchesTab } from './features/matches/components/MatchesTab';
 import { useMatchActions } from './features/matches/hooks/useMatchActions';
-import { useMatches } from './features/matches/hooks/useMatches';
-import { PlayersTab } from './features/players/components/PlayersTab';
-import { usePlayers } from './features/players/hooks/usePlayers';
+import { useMyMatches } from './features/matches/hooks/useMyMatches';
 import { SettingsTab } from './features/settings/components/SettingsTab';
 import type { AppTab, MatchData } from './types';
 import {
@@ -53,8 +51,8 @@ export default function App() {
     updateUserProfile,
   } = useAuth();
 
-  const { matches, matchesLoading } = useMatches(user);
-  const { allPlayers } = usePlayers(user);
+  const { upcoming, past, loading: matchesLoading } = useMyMatches(user);
+  const matches = [...upcoming, ...past];
 
   const [authView, setAuthView] = useState<AuthView>('login');
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
@@ -214,7 +212,6 @@ export default function App() {
         <MatchDetailView
           match={activeMatch}
           profile={profile}
-          players={allPlayers}
           signUpStatus={signUpStatus}
           canManage={canManage(activeMatch)}
           onBack={() => setActiveMatchId(null)}
@@ -253,9 +250,8 @@ export default function App() {
       <main className="max-w-md mx-auto px-4 py-6">
         {activeTab === 'dashboard' && (
           <DashboardTab
-            matches={matches}
+            matches={upcoming}
             matchesLoading={matchesLoading}
-            players={allPlayers}
             canManage={canManage}
             onOpenMatch={setActiveMatchId}
             onCreateMatch={() => setShowCreateModal(true)}
@@ -270,10 +266,6 @@ export default function App() {
             onOpenMatch={setActiveMatchId}
             onCreateMatch={() => setShowCreateModal(true)}
           />
-        )}
-
-        {activeTab === 'players' && (
-          <PlayersTab players={allPlayers} currentUserId={profile.id} />
         )}
 
         {activeTab === 'settings' && (

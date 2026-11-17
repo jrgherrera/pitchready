@@ -67,11 +67,6 @@ export function BottomNav({ activeTab, onChangeTab }: BottomNavProps) {
         <span className="font-inter font-bold text-[10px]">{t('nav.matches')}</span>
       </button>
 
-      <button onClick={() => onChangeTab('players')} className={itemClass('players')}>
-        <span className="material-symbols-outlined text-xl select-none">group</span>
-        <span className="font-inter font-bold text-[10px]">{t('nav.players')}</span>
-      </button>
-
       <button onClick={() => onChangeTab('settings')} className={itemClass('settings')}>
         <span className="material-symbols-outlined text-xl select-none">settings</span>
         <span className="font-inter font-bold text-[10px]">{t('nav.settings')}</span>

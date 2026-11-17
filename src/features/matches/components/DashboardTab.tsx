@@ -1,13 +1,12 @@
 import { Loader2, Plus } from 'lucide-react';
 import { useT } from '../../../i18n';
-import type { MatchData, UserProfile } from '../../../types';
+import type { MatchData } from '../../../types';
 import { countLiveMatches } from '../../../utils/matches';
 import { MatchCard } from './MatchCard';
 
 interface DashboardTabProps {
   matches: MatchData[];
   matchesLoading: boolean;
-  players: UserProfile[];
   canManage: (match: MatchData) => boolean;
   onOpenMatch: (matchId: string) => void;
   onCreateMatch: () => void;
@@ -17,7 +16,6 @@ interface DashboardTabProps {
 export function DashboardTab({
   matches,
   matchesLoading,
-  players,
   canManage,
   onOpenMatch,
   onCreateMatch,
@@ -28,7 +26,7 @@ export function DashboardTab({
 
   return (
     <section className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <div className="bg-[#0f2d24] p-5 rounded-xl border border-[#1f453a] relative overflow-hidden match-card-shadow">
           <div className="absolute -right-3 -bottom-3 opacity-10 text-[#d4f000]">
             <span className="material-symbols-outlined text-7xl select-none fill-icon">
@@ -43,12 +41,6 @@ export function DashboardTab({
           </p>
         </div>
 
-        <div className="bg-[#0a1c17] p-5 rounded-xl border border-[#1f453a] match-card-shadow">
-          <p className="text-gray-400 text-[10px] uppercase tracking-widest font-bold mb-1">
-            {t('dashboard.totalPlayers')}
-          </p>
-          <p className="font-anton text-4xl text-white">{players.length}</p>
-        </div>
       </div>
 
       <button
@@ -93,7 +85,6 @@ export function DashboardTab({
               <MatchCard
                 key={match.id}
                 match={match}
-                players={players}
                 canManage={canManage(match)}
                 onOpen={onOpenMatch}
               />

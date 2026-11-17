@@ -1,6 +1,8 @@
 /** Self-check for membership + roster helpers — run: NODE_NO_WARNINGS=1 npx tsx src/utils/matches.check.ts */
 import assert from 'node:assert/strict';
-import { computeMemberIds, rosterEntryFor } from './matches';
+import { t } from '../i18n';
+import type { MatchData } from '../types';
+import { computeMemberIds, resolveRoster, rosterEntryFor } from './matches';
 
 // Creator, roster and waitlist in one array, creator first, no duplicates.
 assert.deepEqual(
@@ -39,5 +41,19 @@ assert.deepEqual(
   ['u1'],
   'the creator is always a member, so a backfilled match always matches their query',
 );
+
+// Names come from the match itself — there is no global user list to fall back on.
+{
+  const match = {
+    id: 'm1',
+    roster: { u1: { name: 'Jorge', role: 'Keeper' }, h: { name: 'Host' } },
+    joinedPlayerIds: ['u1', 'u2'],
+    guests: [{ id: 'g1', addedBy: 'h' }],
+  } as unknown as MatchData;
+  const entries = resolveRoster(match);
+  assert.equal(entries[0].name, 'Jorge');
+  assert.equal(entries[0].role, 'Keeper');
+  assert.equal(entries[1].name, t('matches.guestPlayer'), 'a member with no roster entry still renders');
+}
 
 console.log('matches.check: ok');
