@@ -57,9 +57,19 @@ export function useAuth() {
 
   // A link keeps the uid, so the "keep own profile on same uid" rule below would keep the
   // synthesized guest profile. Clear it explicitly first, then load the real one.
-  const reapplyAfterLink = () => {
+  const reapplyAfterLink = async () => {
     const current = auth.currentUser;
     if (!current || !applyUserRef.current) return;
+    // Linking keeps the uid AND the existing ID token, which can still carry
+    // firebase.sign_in_provider: 'anonymous'. The rules gate users writes and match creation on
+    // that claim (isRegistered), so without a forced refresh the upgraded guest's onboarding
+    // write — the first thing this flow does — is denied. A failed refresh must not block the
+    // switch-over: a denied write surfaces as itself, an app stuck on the guest profile does not.
+    try {
+      await current.getIdToken(true);
+    } catch {
+      /* keep going: switching over matters more than the refresh */
+    }
     setProfile(null);
     setUser(current);
     applyUserRef.current(current);
@@ -71,7 +81,7 @@ export function useAuth() {
     async function completePendingAuth() {
       try {
         const redirect = await completeGoogleRedirectIfPresent();
-        if (!cancelled && redirect?.operationType === 'link') reapplyAfterLink();
+        if (!cancelled && redirect?.operationType === 'link') await reapplyAfterLink();
         await completeMagicLinkIfPresent();
       } catch (error) {
         if (!cancelled) {
@@ -217,7 +227,7 @@ export function useAuth() {
         await action();
       } finally {
         // The link may succeed and a later step (the verification email) fail: still switch over.
-        if (auth.currentUser && !isGuest(auth.currentUser)) reapplyAfterLink();
+        if (auth.currentUser && !isGuest(auth.currentUser)) await reapplyAfterLink();
       }
     });
   };

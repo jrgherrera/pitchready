@@ -70,6 +70,10 @@ const unverifiedDb = env.authenticatedContext('unverified', { email_verified: fa
 const superDb = env.authenticatedContext('super', {
   email: 'jrgherrera@gmail.com', email_verified: true,
 }).firestore();
+// A verified account that is simply someone else: the super-admin compare must not reach it.
+const outsiderDb = env.authenticatedContext('outsider', {
+  email: 'someone.else@gmail.com', email_verified: true,
+}).firestore();
 
 // The three leaks the spec exists to close, inverted by Task 6. They were asserted as SUCCEEDING
 // until the read rules closed; a regression here reopens the whole collection to every signed-in user.
@@ -138,15 +142,21 @@ await assertSucceeds(getDoc(doc(waitingDb, 'matches/private')));  // on waitlist
 await assertFails(getDoc(doc(strangerDb, 'matches/private')));
 await assertFails(getDoc(doc(anonDb, 'matches/private')));
 await assertFails(getDoc(doc(unauthedDb, 'matches/private')));
-// A document with no memberIds at all reads as "nobody is a member", not as an open door —
-// and stays readable by the super admin, which is the branch the backfill needs.
+// A document with no memberIds at all reads as "nobody is a member", not as an open door — and
+// stays reachable by the super admin, the only thing that can still read a legacy document.
 await assertFails(getDoc(doc(strangerDb, 'matches/full')));
 await assertSucceeds(getDoc(doc(superDb, 'matches/full')));
+// The super-admin compare is an exact string: a different verified email is not a way in. Pinned
+// so a future loosening to a domain match (or a dropped email_verified) fails here.
+await assertFails(getDoc(doc(outsiderDb, 'matches/full')));
 
 // A listing is allowed only when its own filters prove the rule — the documents it would return
 // are never consulted — so an unfiltered listing is denied and the membership query is not.
 await assertFails(getDocs(collection(playerDb, 'matches')));
 await assertSucceeds(getDocs(query(collection(playerDb, 'matches'), where('memberIds', 'array-contains', 'player'))));
+// Substituting someone else's uid is the one query that would hand a stranger a target's whole
+// history: the filter proves membership for 'host', which is not the caller.
+await assertFails(getDocs(query(collection(playerDb, 'matches'), where('memberIds', 'array-contains', 'host'))));
 // The two listeners useMyMatches actually attaches, date range, ordering and cap included: the
 // extra constraints must not cost the membership filter its proof.
 await assertSucceeds(getDocs(query(collection(playerDb, 'matches'),
@@ -165,10 +175,10 @@ await assertFails(getDocs(query(
   collection(playerDb, 'matches'),
   where('creatorId', '==', 'host'), where('date', '>=', weekStart), where('date', '<', weekEnd),
 )));
-// The super-admin branch on `list`: the backfill enumerates every match as the owner. Without it
-// an unfiltered listing returns zero documents rather than an error, so a denial would be
-// indistinguishable from a finished migration.
-await assertSucceeds(getDocs(collection(superDb, 'matches')));
+// The super admin reads one named document, but does NOT enumerate: that would make any browser
+// session holding an ID token for that email a credential for the whole collection, where console
+// enumeration is gated by Google IAM. A denied listing is a query-level error, not an empty result.
+await assertFails(getDocs(collection(superDb, 'matches')));
 
 // The preview stays the public surface, for anonymous and signed-out readers alike.
 await assertSucceeds(getDoc(doc(anonDb, 'matchPreviews/m1')));
@@ -179,6 +189,10 @@ await assertFails(getDoc(doc(playerDb, 'users/host')));
 await assertFails(getDocs(collection(playerDb, 'users')));
 // Anonymous attendees have no users/{uid} doc — useAuth synthesizes one locally and says so.
 await assertFails(setDoc(doc(anonDb, 'users/anon'), { name: 'A' }));
+// First-run onboarding, the write isRegistered() newly gates: 'verified' has no users doc yet,
+// so this is a create and not the update the seeded actors exercise below.
+await assertSucceeds(setDoc(doc(verifiedDb, 'users/verified'), { id: 'verified', name: 'V' }));
+await assertFails(setDoc(doc(verifiedDb, 'users/other'), { id: 'other', name: 'X' }));
 
 // Creation is open to any verified, registered user — no admin flag, which no longer exists.
 await assertSucceeds(setDoc(doc(verifiedDb, 'matches/new2'), validMatchPayload('verified')));

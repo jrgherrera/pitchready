@@ -83,24 +83,30 @@ service cloud.firestore {
       //   - membership first, unlike isMatchOwner(): isSuperAdmin() reads request.auth.token.email,
       //     which is undefined for an anonymous attendee, so a member short-circuits before it;
       //   - .get('memberIds', []) rather than .memberIds: a document without the key must read as
-      //     "not a member", not as an error, or it denies the super admin too and strands the backfill.
-      allow get: if request.auth.uid in resource.data.get('memberIds', []) || isSuperAdmin();
+      //     "not a member", not as an error, which would deny the super admin too and leave a
+      //     legacy document with no memberIds unreachable by any client.
+      // isSuperAdmin() is break-glass for a single known id, deliberately NOT on `list`: reading one
+      // document the owner names is a different cost class from enumerating the collection.
+      allow get: if isSignedIn()
+        && (request.auth.uid in resource.data.get('memberIds', []) || isSuperAdmin());
 
       // `list` is NOT evaluated against the documents a query returns: it is evaluated against what
       // the query's own filters prove, with unconstrained fields reading as absent. So a listing is
       // allowed only when its filters make one of these branches provably true, which is why the
       // creator branch has to be spelled out: the weekly cap (countMyActiveMatchesInWeek) filters on
       // creatorId with a date range and never mentions memberIds, so membership is unprovable there
-      // and the query is denied however faithfully the documents carry the uid. It grants no extra
-      // documents — onlyRosterChanged() derives memberIds from creator + joined + waitlist, so the
-      // creator is always a member — only a second provable path to the same set.
-      // The super-admin branch is what keeps the backfill able to enumerate matches. Without it an
-      // unfiltered listing returns zero documents rather than an error — a denial that reads as a
-      // finished migration. The cost is the owner enumerating their own matches, which the Firebase
-      // console already allows.
-      allow list: if request.auth.uid in resource.data.get('memberIds', [])
-        || resource.data.get('creatorId', '') == request.auth.uid
-        || isSuperAdmin();
+      // and the query is denied however faithfully the documents carry the uid.
+      // The creator branch is safe not because the creator is always in memberIds — nothing enforces
+      // that (`create` constrains no memberIds, and an owner's isMatchOwner() update bypasses
+      // onlyRosterChanged() entirely), so a match whose memberIds excludes its creator can exist and
+      // IS returned here. It is safe because the branch is only satisfiable by a query that pins
+      // creatorId to the caller's own uid: the extra documents are exactly the ones attributed to
+      // that caller, which isMatchOwner() already lets them update and delete outright.
+      // Deliberate asymmetry: `get` has no creator branch, so such a creator can list a document
+      // they cannot then read by id. Nothing reads a match by id, so nothing is broken by it.
+      allow list: if isSignedIn()
+        && (request.auth.uid in resource.data.get('memberIds', [])
+          || resource.data.get('creatorId', '') == request.auth.uid);
 
       // Creation needs a real, verified account — no admin flag (the `admin` field is retired).
       allow create: if isRegistered()
