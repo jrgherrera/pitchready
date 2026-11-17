@@ -1,7 +1,7 @@
 /** Characterization of firestore.rules — run: npm run check:rules (needs the Firestore emulator) */
 import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, setLogLevel, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query, setLogLevel, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 
 setLogLevel('silent'); // assertFails checks the permission-denied code, not the log
 
@@ -11,6 +11,14 @@ const elevenIds = [...tenIds, 'over'];
 const validPreviewPayload = () => ({
   id: 'm1', title: 'Friday', date: new Date(), capacity: 10, occupiedCount: 1, creatorName: 'H',
 });
+/** The minimum a create must carry: the rules only read creatorId, the rest is what the app sends. */
+const validMatchPayload = (uid: string) => ({
+  creatorId: uid, title: 'New', date: new Date(), capacity: 10,
+  joinedPlayerIds: [uid], memberIds: [uid], roster: { [uid]: { name: 'N' } },
+});
+// The weekly cap's window (countMyActiveMatchesInWeek): a creatorId query with a date range.
+const weekStart = new Date('2026-11-16T00:00:00Z');
+const weekEnd = new Date('2026-11-23T00:00:00Z');
 
 const env = await initializeTestEnvironment({
   projectId: 'pitchready-rules',
@@ -32,22 +40,45 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, 'matches/guestok'), { creatorId: 'host', capacity: 10, joinedPlayerIds: nineIds.slice(0, 8), guests: [{ name: 'g', addedBy: 'host' }] });
   await setDoc(doc(db, 'matches/joinme'), { creatorId: 'host', capacity: 10, joinedPlayerIds: ['host'], memberIds: ['host'], roster: { host: { name: 'H' } } });
   await setDoc(doc(db, 'matches/over'), { creatorId: 'host', capacity: 10, joinedPlayerIds: elevenIds });
+  // Read fixture, kept separate from m1: m1's memberIds are pinned by the write assertions below,
+  // which would have to change in step with every extra member seeded into it.
+  await setDoc(doc(db, 'matches/private'), {
+    creatorId: 'host', capacity: 10, joinedPlayerIds: ['host', 'player'], waitlistPlayerIds: ['waiting'],
+    memberIds: ['host', 'player', 'waiting'], roster: { host: { name: 'H' }, player: { name: 'P' } },
+  });
+  // Dated, so it is the only match the weekly cap's range query can return.
+  await setDoc(doc(db, 'matches/capweek'), {
+    creatorId: 'host', capacity: 10, date: new Date('2026-11-18T19:00:00Z'),
+    joinedPlayerIds: ['host'], memberIds: ['host'],
+  });
 });
 
-const hostDb = env.authenticatedContext('host').firestore();
+// email_verified rides on every actor that creates a match; the mock token omits it otherwise.
+const hostDb = env.authenticatedContext('host', { email_verified: true }).firestore();
 const playerDb = env.authenticatedContext('player').firestore();
 const strangerDb = env.authenticatedContext('stranger').firestore();
 const overDb = env.authenticatedContext('over').firestore();
+const waitingDb = env.authenticatedContext('waiting').firestore();
 const unauthedDb = env.unauthenticatedContext().firestore();
+// An anonymous attendee: joins and reads previews by link, never creates.
+const anonDb = env.authenticatedContext('anon', {
+  firebase: { sign_in_provider: 'anonymous', identities: {} },
+}).firestore();
+const verifiedDb = env.authenticatedContext('verified', { email_verified: true }).firestore();
+const unverifiedDb = env.authenticatedContext('unverified', { email_verified: false }).firestore();
+// Mirrored in firestore.rules (isSuperAdmin) and src/utils/matches.ts (SUPER_ADMIN_EMAIL).
+const superDb = env.authenticatedContext('super', {
+  email: 'jrgherrera@gmail.com', email_verified: true,
+}).firestore();
 
-// Today's behavior — these three are the leaks the spec exists to close.
-// They are asserted as SUCCEEDING here on purpose; Task 6 inverts all three to assertFails.
-// matches: `allow read: if isSignedIn()` — any signed-in user reads any match by id
-await assertSucceeds(getDoc(doc(strangerDb, 'matches/m1')));
-// matches: `allow read: if isSignedIn()` — and lists the whole collection
-await assertSucceeds(getDocs(collection(strangerDb, 'matches')));
-// users: `allow read: if isSignedIn()` — and lists the whole user directory
-await assertSucceeds(getDocs(collection(strangerDb, 'users')));
+// The three leaks the spec exists to close, inverted by Task 6. They were asserted as SUCCEEDING
+// until the read rules closed; a regression here reopens the whole collection to every signed-in user.
+// matches get: membership, not sign-in — a stranger cannot read a match by id
+await assertFails(getDoc(doc(strangerDb, 'matches/m1')));
+// matches list: nor enumerate the collection
+await assertFails(getDocs(collection(strangerDb, 'matches')));
+// users list: nor enumerate the user directory
+await assertFails(getDocs(collection(strangerDb, 'users')));
 
 // Today's behavior that must survive Task 6 unchanged.
 // matches update: `onlyRosterChanged()` — a non-owner may change roster fields (also proves m1 is seeded)
@@ -98,6 +129,74 @@ await assertSucceeds(updateDoc(doc(playerDb, 'matches/guestok'), { joinedPlayerI
 // No capacity field: counts as the default 10 — a join up to 10 works, past 10 is denied.
 await assertSucceeds(updateDoc(doc(playerDb, 'matches/legacy'), { joinedPlayerIds: [...nineIds, 'player'], updatedAt: 'x' }));
 await assertFails(updateDoc(doc(overDb, 'matches/legacy'), { joinedPlayerIds: [...nineIds, 'player', 'over'], updatedAt: 'x' }));
+
+// --- Reads are scoped to membership ----------------------------------------------------------
+// get: being in memberIds, by any route in — creator, roster or waitlist.
+await assertSucceeds(getDoc(doc(hostDb, 'matches/private')));
+await assertSucceeds(getDoc(doc(playerDb, 'matches/private')));   // on joinedPlayerIds
+await assertSucceeds(getDoc(doc(waitingDb, 'matches/private')));  // on waitlistPlayerIds
+await assertFails(getDoc(doc(strangerDb, 'matches/private')));
+await assertFails(getDoc(doc(anonDb, 'matches/private')));
+await assertFails(getDoc(doc(unauthedDb, 'matches/private')));
+// A document with no memberIds at all reads as "nobody is a member", not as an open door —
+// and stays readable by the super admin, which is the branch the backfill needs.
+await assertFails(getDoc(doc(strangerDb, 'matches/full')));
+await assertSucceeds(getDoc(doc(superDb, 'matches/full')));
+
+// A listing is allowed only when its own filters prove the rule — the documents it would return
+// are never consulted — so an unfiltered listing is denied and the membership query is not.
+await assertFails(getDocs(collection(playerDb, 'matches')));
+await assertSucceeds(getDocs(query(collection(playerDb, 'matches'), where('memberIds', 'array-contains', 'player'))));
+// The two listeners useMyMatches actually attaches, date range, ordering and cap included: the
+// extra constraints must not cost the membership filter its proof.
+await assertSucceeds(getDocs(query(collection(playerDb, 'matches'),
+  where('memberIds', 'array-contains', 'player'), where('date', '>=', weekStart), orderBy('date', 'asc'))));
+await assertSucceeds(getDocs(query(collection(playerDb, 'matches'),
+  where('memberIds', 'array-contains', 'player'), where('date', '<', weekStart), orderBy('date', 'desc'), limit(20))));
+// The weekly cap (countMyActiveMatchesInWeek) filters on creatorId and a date range and never
+// mentions memberIds, so membership is unprovable and this query needs the creator branch on
+// `list`. It was denied without it even though the one match it returns holds host in memberIds.
+await assertSucceeds(getDocs(query(
+  collection(hostDb, 'matches'),
+  where('creatorId', '==', 'host'), where('date', '>=', weekStart), where('date', '<', weekEnd),
+)));
+// That branch is not a way into someone else's matches: it compares creatorId to the caller.
+await assertFails(getDocs(query(
+  collection(playerDb, 'matches'),
+  where('creatorId', '==', 'host'), where('date', '>=', weekStart), where('date', '<', weekEnd),
+)));
+// The super-admin branch on `list`: the backfill enumerates every match as the owner. Without it
+// an unfiltered listing returns zero documents rather than an error, so a denial would be
+// indistinguishable from a finished migration.
+await assertSucceeds(getDocs(collection(superDb, 'matches')));
+
+// The preview stays the public surface, for anonymous and signed-out readers alike.
+await assertSucceeds(getDoc(doc(anonDb, 'matchPreviews/m1')));
+
+// The user directory is closed: own document only.
+await assertSucceeds(getDoc(doc(playerDb, 'users/player')));
+await assertFails(getDoc(doc(playerDb, 'users/host')));
+await assertFails(getDocs(collection(playerDb, 'users')));
+// Anonymous attendees have no users/{uid} doc — useAuth synthesizes one locally and says so.
+await assertFails(setDoc(doc(anonDb, 'users/anon'), { name: 'A' }));
+
+// Creation is open to any verified, registered user — no admin flag, which no longer exists.
+await assertSucceeds(setDoc(doc(verifiedDb, 'matches/new2'), validMatchPayload('verified')));
+await assertFails(setDoc(doc(anonDb, 'matches/new1'), validMatchPayload('anon')));
+await assertFails(setDoc(doc(unverifiedDb, 'matches/new3'), validMatchPayload('unverified')));
+await assertFails(setDoc(doc(verifiedDb, 'matches/new4'), validMatchPayload('host')));
+// Anonymous users attend but do not create: joining is still open to them.
+await assertSucceeds(updateDoc(doc(anonDb, 'matches/joinme'), {
+  joinedPlayerIds: ['host', 'stranger', 'anon'], memberIds: ['host', 'stranger', 'anon'],
+  'roster.anon': { name: 'A' }, updatedAt: 'x',
+}));
+
+// Leaving revokes your own read. This is the cause of the permission-denied that useMyMatches
+// swallows on purpose — pinned here so nobody later "fixes" the rule instead of the handler.
+await assertSucceeds(updateDoc(doc(playerDb, 'matches/private'), {
+  joinedPlayerIds: ['host'], memberIds: ['host', 'waiting'], updatedAt: 'x',
+}));
+await assertFails(getDoc(doc(playerDb, 'matches/private')));
 
 // matches delete: `allow delete: if isMatchOwner()` — non-creator denied
 await assertFails(deleteDoc(doc(playerDb, 'matches/m1')));

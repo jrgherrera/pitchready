@@ -15,8 +15,11 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    // Signed in with a real account. Anonymous attendees read a preview by link and join a match;
+    // they have no users/{uid} document and they do not create matches.
+    function isRegistered() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
     // Mirrored in src/utils/matches.ts (SUPER_ADMIN_EMAIL) — keep both in sync
@@ -26,13 +29,7 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
-    function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc().admin == true;
-    }
-
-    // Matches — admins create; only the creator (or super admin) edits; anyone joins
+    // Matches — any verified account creates; only the creator (or super admin) edits; anyone joins
     match /matches/{matchId} {
       // Fields a player changes by joining, leaving, or bringing a +1
       // roster rides as dotted `roster.<uid>` keys: the caller may touch only their own entry.
@@ -80,12 +77,38 @@ service cloud.firestore {
           && (isSuperAdmin() || resource.data.get('creatorId', '') == request.auth.uid);
       }
 
-      allow read: if isSignedIn();
+      // A match is visible to its members only — creator, roster and waitlist all ride in memberIds.
+      // Two shapes here are load-bearing, and both are because an ERROR anywhere in the expression
+      // denies, whichever side of the `||` it lands on and whatever the other side evaluates to:
+      //   - membership first, unlike isMatchOwner(): isSuperAdmin() reads request.auth.token.email,
+      //     which is undefined for an anonymous attendee, so a member short-circuits before it;
+      //   - .get('memberIds', []) rather than .memberIds: a document without the key must read as
+      //     "not a member", not as an error, or it denies the super admin too and strands the backfill.
+      allow get: if request.auth.uid in resource.data.get('memberIds', []) || isSuperAdmin();
 
-      allow create: if (isAdmin() || isSuperAdmin())
+      // `list` is NOT evaluated against the documents a query returns: it is evaluated against what
+      // the query's own filters prove, with unconstrained fields reading as absent. So a listing is
+      // allowed only when its filters make one of these branches provably true, which is why the
+      // creator branch has to be spelled out: the weekly cap (countMyActiveMatchesInWeek) filters on
+      // creatorId with a date range and never mentions memberIds, so membership is unprovable there
+      // and the query is denied however faithfully the documents carry the uid. It grants no extra
+      // documents — onlyRosterChanged() derives memberIds from creator + joined + waitlist, so the
+      // creator is always a member — only a second provable path to the same set.
+      // The super-admin branch is what keeps the backfill able to enumerate matches. Without it an
+      // unfiltered listing returns zero documents rather than an error — a denial that reads as a
+      // finished migration. The cost is the owner enumerating their own matches, which the Firebase
+      // console already allows.
+      allow list: if request.auth.uid in resource.data.get('memberIds', [])
+        || resource.data.get('creatorId', '') == request.auth.uid
+        || isSuperAdmin();
+
+      // Creation needs a real, verified account — no admin flag (the `admin` field is retired).
+      allow create: if isRegistered()
+        && request.auth.token.email_verified == true
         && isValidId(matchId)
         && request.resource.data.creatorId == request.auth.uid;
 
+      // Still isSignedIn(), deliberately: an anonymous attendee joins and leaves by link.
       allow update: if isSignedIn()
         && isValidId(matchId)
         && (isMatchOwner() || (onlyRosterChanged() && withinCapacity()));
@@ -122,16 +145,18 @@ service cloud.firestore {
         && ownsMatch(get(/databases/$(database)/documents/matches/$(matchId)).data);
     }
 
-    // Users — owner writes only; clients cannot grant themselves admin
+    // Users — own document only; clients cannot grant themselves admin
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // Rosters carry the names matches need, so nothing reads another player's profile.
+      allow get: if isSignedIn() && userId == request.auth.uid;
+      allow list: if false;
 
-      allow create: if isSignedIn()
+      allow create: if isRegistered()
         && userId == request.auth.uid
         && isValidId(userId)
         && request.resource.data.get('admin', false) == false;
 
-      allow update: if isSignedIn()
+      allow update: if isRegistered()
         && userId == request.auth.uid
         && isValidId(userId)
         && request.resource.data.get('admin', false) == resource.data.get('admin', false);
