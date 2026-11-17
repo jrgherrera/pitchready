@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { deleteDoc, deleteField, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useT } from '../../../i18n';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, SignUpStatus, UserProfile } from '../../../types';
@@ -8,10 +8,23 @@ import {
   isMatchFull,
   isWaitlistFull,
   matchToForm,
-  promoteFromWaitlist,
+  rosterEntryFor,
 } from '../../../utils/matches';
+import {
+  createMatch as createMatchDoc,
+  deleteMatchEverywhere,
+  joinMatch,
+  leaveMatch,
+  setGuestList,
+  updateMatchDetails,
+} from '../api/matchWrites';
 import { INITIAL_CREATE_FORM } from '../constants';
 
+/**
+ * Form state, confirmation prompts and the sign-up animation. Every write itself lives in
+ * `../api/matchWrites`, which keeps `matches/{id}` and `matchPreviews/{id}` in step.
+ * `saveTeams` stays here: `teams` is never a preview field, so it needs no batch.
+ */
 export function useMatchActions(
   profile: UserProfile | null,
   onMatchCreated?: (matchId: string) => void,
@@ -31,37 +44,10 @@ export function useMatchActions(
     }
 
     setCreatingMatch(true);
-    const newMatchId = `match_${Date.now()}`;
-    const matchDocRef = doc(db, 'matches', newMatchId);
-
-    const capacity = Math.max(2, Number(createForm.capacity) || 10);
-    const day = createForm.date || new Date().toISOString().split('T')[0];
-
-    const matchPayload: MatchData = {
-      id: newMatchId,
-      title: createForm.title || t('matches.defaultTitle'),
-      // Local kick-off instant; Firestore stores a Date as a Timestamp
-      date: new Date(`${day}T${createForm.time || '19:00'}`),
-      capacity,
-      duration: Number(createForm.duration),
-      status: 'needs_players',
-      joinedPlayerIds: [profile.id],
-      waitlistPlayerIds: [],
-      guests: [],
-      creatorId: profile.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      // Both optional — omit rather than write null, the host can add them later
-      ...(createForm.location ? { location: createForm.location } : {}),
-      ...(createForm.price === '' ? {} : { price: Number(createForm.price) }),
-    };
-
     try {
-      await setDoc(matchDocRef, matchPayload);
+      const matchId = await createMatchDoc(createForm, profile, t('matches.defaultTitle'));
       setCreateForm(INITIAL_CREATE_FORM);
-      onMatchCreated?.(newMatchId);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `matches/${newMatchId}`);
+      onMatchCreated?.(matchId);
     } finally {
       setCreatingMatch(false);
     }
@@ -83,23 +69,9 @@ export function useMatchActions(
     if (!editingMatchId) return;
 
     setCreatingMatch(true);
-    const day = createForm.date || new Date().toISOString().split('T')[0];
-
     try {
-      await updateDoc(doc(db, 'matches', editingMatchId), {
-        title: createForm.title || t('matches.defaultTitle'),
-        date: new Date(`${day}T${createForm.time || '19:00'}`),
-        capacity: Math.max(2, Number(createForm.capacity) || 10),
-        duration: Number(createForm.duration),
-        // Cleared fields are removed outright. A legacy string location reaches the form as
-        // null (the picker can't show it), so saving an edit drops it — pick one to replace it.
-        price: createForm.price === '' ? deleteField() : Number(createForm.price),
-        location: createForm.location ?? deleteField(),
-        updatedAt: new Date().toISOString(),
-      });
+      await updateMatchDetails(editingMatchId, createForm, t('matches.defaultTitle'));
       cancelEditMatch();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `matches/${editingMatchId}`);
     } finally {
       setCreatingMatch(false);
     }
@@ -107,12 +79,8 @@ export function useMatchActions(
 
   const deleteMatch = async (matchId: string) => {
     if (!window.confirm(t('matches.confirmDelete'))) return;
-    try {
-      await deleteDoc(doc(db, 'matches', matchId));
-      onMatchDeleted?.();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `matches/${matchId}`);
-    }
+    await deleteMatchEverywhere(matchId);
+    onMatchDeleted?.();
   };
 
   const joinOrLeaveMatch = async (match: MatchData) => {
@@ -120,46 +88,28 @@ export function useMatchActions(
 
     const isJoined = match.joinedPlayerIds.includes(profile.id);
     const isOnWaitlist = (match.waitlistPlayerIds ?? []).includes(profile.id);
-    let updatedPlayerIds = [...match.joinedPlayerIds];
-    let updatedWaitlist = [...(match.waitlistPlayerIds ?? [])];
-    let updatedGuests = [...(match.guests ?? [])];
-    let joining = false;
 
-    if (isJoined) {
-      updatedPlayerIds = updatedPlayerIds.filter((id) => id !== profile.id);
-      updatedGuests = updatedGuests.filter((g) => g.addedBy !== profile.id);
-      const promoted = promoteFromWaitlist(
-        updatedPlayerIds,
-        updatedWaitlist,
-        updatedGuests,
-        match.capacity,
-      );
-      updatedPlayerIds = promoted.joinedPlayerIds;
-      updatedWaitlist = promoted.waitlistPlayerIds;
-    } else if (isOnWaitlist) {
-      updatedWaitlist = updatedWaitlist.filter((id) => id !== profile.id);
+    let action: 'leave' | 'roster' | 'waitlist';
+    if (isJoined || isOnWaitlist) {
+      action = 'leave';
     } else if (!isMatchFull(match)) {
-      updatedPlayerIds.push(profile.id);
-      updatedWaitlist = updatedWaitlist.filter((id) => id !== profile.id);
-      joining = true;
-      setSignUpStatus('processing');
+      action = 'roster';
     } else if (!isWaitlistFull(match)) {
-      updatedWaitlist.push(profile.id);
-      joining = true;
-      setSignUpStatus('processing');
+      action = 'waitlist';
     } else {
       alert(t('matches.waitlistFull'));
       return;
     }
 
-    const matchDocRef = doc(db, 'matches', match.id);
+    const joining = action !== 'leave';
+    if (joining) setSignUpStatus('processing');
+
     try {
-      await updateDoc(matchDocRef, {
-        joinedPlayerIds: updatedPlayerIds,
-        waitlistPlayerIds: updatedWaitlist,
-        guests: updatedGuests,
-        updatedAt: new Date().toISOString(),
-      });
+      if (action === 'leave') {
+        await leaveMatch(match, profile.id);
+      } else {
+        await joinMatch(match, { id: profile.id, ...rosterEntryFor(profile) }, action);
+      }
 
       if (joining) {
         setTimeout(() => {
@@ -171,7 +121,7 @@ export function useMatchActions(
       }
     } catch (error) {
       setSignUpStatus('idle');
-      handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+      throw error;
     }
   };
 
@@ -199,14 +149,7 @@ export function useMatchActions(
       createdAt: new Date().toISOString(),
     };
 
-    try {
-      await updateDoc(doc(db, 'matches', match.id), {
-        guests: [...(match.guests ?? []), guest],
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
-    }
+    await setGuestList(match, [...(match.guests ?? []), guest]);
   };
 
   const removeGuestPlusOne = async (match: MatchData, guestId: string) => {
@@ -225,24 +168,10 @@ export function useMatchActions(
       return;
     }
 
-    const updatedGuests = (match.guests ?? []).filter((g) => g.id !== guestId);
-    const promoted = promoteFromWaitlist(
-      match.joinedPlayerIds,
-      match.waitlistPlayerIds ?? [],
-      updatedGuests,
-      match.capacity,
+    await setGuestList(
+      match,
+      (match.guests ?? []).filter((g) => g.id !== guestId),
     );
-
-    try {
-      await updateDoc(doc(db, 'matches', match.id), {
-        guests: updatedGuests,
-        joinedPlayerIds: promoted.joinedPlayerIds,
-        waitlistPlayerIds: promoted.waitlistPlayerIds,
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
-    }
   };
 
   /** Host-only — firestore.rules rejects this write for anyone but the match owner. */
