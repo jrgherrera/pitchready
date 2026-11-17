@@ -231,7 +231,7 @@ export function useAuth() {
   };
 
   const completeOnboarding = async (name: string, role: PlayerRole) => {
-    if (!user) return;
+    if (!user || isGuest(user)) return; // guests have no users/{uid} doc
     await runAuthAction(async () => {
       await updateProfile(user, {
         displayName: name.trim(),
@@ -244,7 +244,7 @@ export function useAuth() {
   };
 
   const updateUserProfile = async (nextProfile: UserProfile) => {
-    if (!user) return;
+    if (!user || isGuest(user)) return; // rules forbid users/{uid} for anonymous users
     const userDocRef = doc(db, 'users', nextProfile.id);
     try {
       await updateDoc(userDocRef, {

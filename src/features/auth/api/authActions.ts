@@ -194,8 +194,16 @@ export function needsEmailVerification(user: User): boolean {
 
 /** Call on a visitor's action (e.g. submitting an invitation), never on mere page view. */
 export async function signInAsGuest(): Promise<User> {
-  const credential = await signInAnonymously(auth);
-  return credential.user;
+  try {
+    const credential = await signInAnonymously(auth);
+    return credential.user;
+  } catch (error) {
+    // Anonymous provider switched off: say so, not the Google message the shared mapping gives.
+    if (error instanceof FirebaseError && error.code === 'auth/operation-not-allowed') {
+      throw new Error(t('auth.errors.guestDisabled'));
+    }
+    throw error;
+  }
 }
 
 export function isGuest(user: User): boolean {

@@ -96,6 +96,8 @@ const enCatalog = {
         'This domain is not authorized for Google sign-in. Add it under Firebase Authentication → Settings → Authorized domains.',
       googleDisabled:
         'Google sign-in is not enabled. Enable the Google provider in Firebase Authentication → Sign-in method.',
+      guestDisabled:
+        'Joining as a guest is not available right now. Please sign in with an account instead.',
       accountExistsDifferent:
         'An account already exists with this email using a different sign-in method.',
       network: 'Network error. Check your connection and try again.',

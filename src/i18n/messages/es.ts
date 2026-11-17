@@ -97,6 +97,8 @@ export const es: Messages = {
         'Este dominio no está autorizado para Google. Añádelo en Authentication → Settings → Authorized domains.',
       googleDisabled:
         'Google no está habilitado. Activa el proveedor en Authentication → Sign-in method.',
+      guestDisabled:
+        'Entrar como invitado no está disponible ahora. Inicia sesión con una cuenta.',
       accountExistsDifferent:
         'Ya existe una cuenta con este correo usando otro método de acceso.',
       network: 'Error de red. Comprueba tu conexión e inténtalo de nuevo.',
