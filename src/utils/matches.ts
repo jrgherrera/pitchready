@@ -1,10 +1,13 @@
 import { t } from '../i18n';
-import type { CreateMatchForm, MatchData, MatchGuest, PlayerRole, UserProfile } from '../types';
+import type { CreateMatchForm, MatchData, MatchGuest, PlayerRole, RosterMember, UserProfile } from '../types';
 import { getAvatarUrl } from './avatars';
 import { toDateTimeInputs } from './dates';
 
 /** Extra hold / waitlist spots beyond match capacity */
 export const WAITLIST_SLOTS = 4;
+
+/** Past matches shown in the list */
+export const PAST_MATCH_LIMIT = 10;
 
 /** Can edit or delete any match — mirrored in firestore.rules, keep both in sync */
 export const SUPER_ADMIN_EMAIL = 'jrgherrera@gmail.com';
@@ -80,6 +83,24 @@ export type RosterEntry =
       photoURL?: string;
       photoUserId: string;
     };
+
+/** Creator first, then joined, then waitlist, de-duplicated. Drives who can read a match. */
+export function computeMemberIds(
+  match: Pick<MatchData, 'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds'>,
+): string[] {
+  return [...new Set([match.creatorId, ...match.joinedPlayerIds, ...(match.waitlistPlayerIds ?? [])])];
+}
+
+/** Roster snapshot of a profile; absent optionals are omitted because Firestore rejects undefined. */
+export function rosterEntryFor(
+  profile: Pick<UserProfile, 'id' | 'name' | 'role' | 'photoURL'>,
+): RosterMember {
+  return {
+    name: profile.name,
+    ...(profile.role && { role: profile.role }),
+    ...(profile.photoURL && { photoURL: profile.photoURL }),
+  };
+}
 
 export function getOccupiedCount(match: MatchData) {
   return match.joinedPlayerIds.length + (match.guests?.length ?? 0);
