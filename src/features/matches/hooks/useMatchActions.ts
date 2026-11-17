@@ -38,10 +38,7 @@ export function useMatchActions(
 
   const createMatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.admin) {
-      alert(t('matches.onlyAdmins'));
-      return;
-    }
+    if (!profile) return;
 
     setCreatingMatch(true);
     try {
@@ -171,8 +168,7 @@ export function useMatchActions(
 
     const canRemove =
       guest.addedBy === profile.id ||
-      match.creatorId === profile.id ||
-      Boolean(profile.admin);
+      match.creatorId === profile.id;
 
     if (!canRemove) {
       alert(t('matches.cannotRemoveGuest'));

@@ -8,7 +8,6 @@ interface DashboardTabProps {
   matches: MatchData[];
   matchesLoading: boolean;
   players: UserProfile[];
-  canHostMatches: boolean;
   canManage: (match: MatchData) => boolean;
   onOpenMatch: (matchId: string) => void;
   onCreateMatch: () => void;
@@ -19,7 +18,6 @@ export function DashboardTab({
   matches,
   matchesLoading,
   players,
-  canHostMatches,
   canManage,
   onOpenMatch,
   onCreateMatch,
@@ -53,14 +51,12 @@ export function DashboardTab({
         </div>
       </div>
 
-      {canHostMatches && (
-        <button
-          onClick={onCreateMatch}
-          className="w-full bg-[#d4f000] hover:bg-[#c3dd00] text-[#001710] font-anton py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg hover:shadow-[#d4f000]/10 transition-all active:scale-[0.98] uppercase tracking-wider text-sm font-bold"
-        >
-          <Plus className="w-5 h-5 stroke-[3]" /> {t('dashboard.createNewMatch')}
-        </button>
-      )}
+      <button
+        onClick={onCreateMatch}
+        className="w-full bg-[#d4f000] hover:bg-[#c3dd00] text-[#001710] font-anton py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg hover:shadow-[#d4f000]/10 transition-all active:scale-[0.98] uppercase tracking-wider text-sm font-bold"
+      >
+        <Plus className="w-5 h-5 stroke-[3]" /> {t('dashboard.createNewMatch')}
+      </button>
 
       <div>
         <div className="flex justify-between items-end mb-4">
@@ -82,16 +78,14 @@ export function DashboardTab({
         ) : matches.length === 0 ? (
           <div className="bg-[#0a1c17] border border-[#1f453a] rounded-xl p-8 text-center text-gray-400 match-card-shadow">
             <p className="mb-4">
-              {canHostMatches ? t('dashboard.emptyAdmin') : t('dashboard.emptyPlayer')}
+              {t('dashboard.emptyAdmin')}
             </p>
-            {canHostMatches && (
-              <button
-                onClick={onCreateMatch}
-                className="bg-[#0f2d24] text-[#d4f000] border border-[#1f453a] px-4 py-2 rounded-lg text-sm font-bold uppercase"
-              >
-                {t('dashboard.hostMatch')}
-              </button>
-            )}
+            <button
+              onClick={onCreateMatch}
+              className="bg-[#0f2d24] text-[#d4f000] border border-[#1f453a] px-4 py-2 rounded-lg text-sm font-bold uppercase"
+            >
+              {t('dashboard.hostMatch')}
+            </button>
           </div>
         ) : (
           <div className="space-y-4">

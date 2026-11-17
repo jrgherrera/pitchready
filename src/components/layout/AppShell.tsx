@@ -14,11 +14,6 @@ export function AppHeader({ profile, onOpenSettings }: AppHeaderProps) {
       <div className="flex justify-between items-center px-4 py-3.5 max-w-4xl mx-auto">
         <h1 className="font-anton text-2xl uppercase tracking-tighter text-white">{t('brand')}</h1>
         <div className="flex items-center gap-3">
-          {profile.admin && (
-            <span className="text-[10px] bg-[#d4f000] text-[#001710] px-2 py-1 rounded-full font-anton uppercase tracking-wider">
-              {t('common.admin')}
-            </span>
-          )}
           <span className="text-xs bg-[#0f2d24] border border-[#1f453a] px-2.5 py-1 rounded-full font-bold text-gray-300">
             {profile.role ? t(`roles.short.${profile.role}`) : t('common.player')}
           </span>

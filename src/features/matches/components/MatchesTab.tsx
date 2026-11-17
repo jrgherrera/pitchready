@@ -6,7 +6,6 @@ import { MatchListCard } from './MatchListCard';
 interface MatchesTabProps {
   matches: MatchData[];
   matchesLoading: boolean;
-  canHostMatches: boolean;
   onOpenMatch: (matchId: string) => void;
   onCreateMatch: () => void;
 }
@@ -14,7 +13,6 @@ interface MatchesTabProps {
 export function MatchesTab({
   matches,
   matchesLoading,
-  canHostMatches,
   onOpenMatch,
   onCreateMatch,
 }: MatchesTabProps) {
@@ -25,14 +23,12 @@ export function MatchesTab({
         <h2 className="font-anton text-2xl uppercase tracking-wider text-[#d4f000]">
           {t('matches.allScheduled')}
         </h2>
-        {canHostMatches && (
-          <button
-            onClick={onCreateMatch}
-            className="bg-[#0f2d24] border border-[#1f453a] hover:border-[#d4f000] px-3 py-1.5 rounded-lg text-xs font-anton uppercase text-[#d4f000]"
-          >
-            {t('matches.newMatch')}
-          </button>
-        )}
+        <button
+          onClick={onCreateMatch}
+          className="bg-[#0f2d24] border border-[#1f453a] hover:border-[#d4f000] px-3 py-1.5 rounded-lg text-xs font-anton uppercase text-[#d4f000]"
+        >
+          {t('matches.newMatch')}
+        </button>
       </header>
 
       <div className="bg-[#0a1c17] p-3 rounded-lg border border-[#1f453a] flex justify-between text-xs text-gray-400">
@@ -46,7 +42,7 @@ export function MatchesTab({
         </div>
       ) : matches.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          {canHostMatches ? t('matches.emptyAdmin') : t('matches.emptyPlayer')}
+          {t('matches.emptyAdmin')}
         </div>
       ) : (
         <div className="space-y-4">

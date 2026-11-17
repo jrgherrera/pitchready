@@ -3,7 +3,6 @@ import type { Messages } from './en';
 export const es: Messages = {
   brand: 'PITCHREADY',
   common: {
-    admin: 'Admin',
     player: 'Jugador',
     or: 'o',
     you: 'TÚ',
@@ -124,7 +123,6 @@ export const es: Messages = {
     upcomingMatches: 'Próximos partidos',
     viewAll: 'Ver todos',
     emptyAdmin: 'Aún no hay partidos. ¡Sé el primero en crear uno!',
-    emptyPlayer: 'Aún no hay partidos. Vuelve pronto.',
     hostMatch: 'Organizar partido',
   },
   matches: {
@@ -133,7 +131,6 @@ export const es: Messages = {
     totalAvailable: 'Disponibles: {{count}} partidos',
     cloudSync: 'Sincronización en la nube activa',
     emptyAdmin: 'No hay partidos. ¡Crea uno con el botón de arriba!',
-    emptyPlayer: 'Aún no hay partidos.',
     confirmed: 'Confirmado',
     needsPlayers: 'Faltan jugadores',
     rosterStatus: 'Estado de la plantilla',
@@ -175,7 +172,6 @@ export const es: Messages = {
     confirmedStatus: 'CONFIRMADO',
     leaveMatch: 'SALIR DEL PARTIDO',
     signUpNow: 'INSCRIBIRSE',
-    onlyAdmins: 'Solo los administradores pueden organizar partidos.',
     defaultTitle: 'Partido PitchReady',
     confirmDelete: '¿Seguro que quieres eliminar este partido?',
     alreadyFull: '¡Este partido ya está completo!',
@@ -205,6 +201,7 @@ export const es: Messages = {
     teamName: 'Equipo {{n}}',
   },
   createMatch: {
+    weeklyLimit: 'Ya tienes {count} partidos activos esa semana. Cancela uno o elige otra semana.',
     title: 'Programar partido',
     matchName: 'Nombre del partido',
     matchNamePlaceholder: 'Miércoles bajo las luces',

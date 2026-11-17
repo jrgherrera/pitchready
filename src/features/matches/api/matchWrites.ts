@@ -1,7 +1,11 @@
 import {
   collection,
   doc,
+  getDocs,
+  query,
+  Timestamp,
   updateDoc,
+  where,
   writeBatch,
   type DocumentData,
   type UpdateData,
@@ -9,6 +13,8 @@ import {
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, MatchGuest, RosterMember, UserProfile } from '../../../types';
 import { isWaitlistFull, rosterEntryFor } from '../../../utils/matches';
+import { weekBounds } from '../../../utils/weeks';
+import { countCreatedActive } from './weeklyLimit';
 import {
   buildCreatePayload,
   buildDetailsPatch,
@@ -71,6 +77,30 @@ export async function createMatch(
     handleFirestoreError(error, OperationType.CREATE, `matches/${matchId}`);
   }
   return matchId;
+}
+
+/**
+ * Active matches `uid` created in the Monday-Sunday week of `kickoff`. A query of its own, not
+ * derived from the loaded match list, whose past half is capped and would undercount.
+ * Filters on `creatorId` alone and narrows the week here: equality plus a `date` range would
+ * need a composite index this project does not deploy.
+ */
+export async function countMyActiveMatchesInWeek(uid: string, kickoff: Date): Promise<number> {
+  const { start, end } = weekBounds(kickoff);
+  try {
+    const snap = await getDocs(query(collection(db, MATCHES), where('creatorId', '==', uid)));
+    const inWeek = snap.docs
+      .map((d) => {
+        const data = d.data();
+        // Legacy docs still hold a 'YYYY-MM-DD' string
+        const date = data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date);
+        return { ...data, id: d.id, date } as MatchData;
+      })
+      .filter((m) => m.date >= start && m.date < end);
+    return countCreatedActive(inWeek, uid);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, MATCHES);
+  }
 }
 
 /** Only the details — roster, creator and timestamps are left alone. */

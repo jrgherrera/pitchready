@@ -66,11 +66,6 @@ export function SettingsTab({
             className="w-20 h-20 rounded-full border-2 border-[#d4f000] mb-3 bg-[#020f0b] object-cover"
           />
           <p className="text-xs text-gray-400 font-bold uppercase">{profile.email}</p>
-          {profile.admin && (
-            <span className="mt-2 text-[10px] bg-[#d4f000] text-[#001710] px-2 py-0.5 rounded-full font-anton uppercase">
-              {t('common.admin')}
-            </span>
-          )}
         </div>
 
         <div className="space-y-1">

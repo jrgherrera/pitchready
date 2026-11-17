@@ -125,7 +125,7 @@ export function MatchDetailView({
   };
 
   const canManageGuest = (addedBy: string) =>
-    addedBy === profile.id || match.creatorId === profile.id || Boolean(profile.admin);
+    addedBy === profile.id || match.creatorId === profile.id;
 
   const openRemoveGuest = (entry: {
     id: string;

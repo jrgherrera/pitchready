@@ -5,7 +5,6 @@ type DeepString<T> = {
 const enCatalog = {
   brand: 'PITCHREADY',
   common: {
-    admin: 'Admin',
     player: 'Player',
     or: 'or',
     you: 'YOU',
@@ -123,7 +122,6 @@ const enCatalog = {
     upcomingMatches: 'Upcoming Matches',
     viewAll: 'View All',
     emptyAdmin: 'No scheduled matches yet. Be the first to create one!',
-    emptyPlayer: 'No scheduled matches yet. Check back soon.',
     hostMatch: 'Host Match',
   },
   matches: {
@@ -132,7 +130,6 @@ const enCatalog = {
     totalAvailable: 'Total Available: {{count}} Matches',
     cloudSync: 'Real-time Cloud Sync Active',
     emptyAdmin: 'No matches found. Create a match using the button above!',
-    emptyPlayer: 'No matches found yet.',
     confirmed: 'Confirmed',
     needsPlayers: 'Needs Players',
     rosterStatus: 'Roster Status',
@@ -174,7 +171,6 @@ const enCatalog = {
     confirmedStatus: 'CONFIRMED',
     leaveMatch: 'LEAVE MATCH',
     signUpNow: 'SIGN UP NOW',
-    onlyAdmins: 'Only admins can host matches.',
     defaultTitle: 'PitchReady Match',
     confirmDelete: 'Are you sure you want to delete this match?',
     alreadyFull: 'This match is already full!',
@@ -204,6 +200,7 @@ const enCatalog = {
     teamName: 'Team {{n}}',
   },
   createMatch: {
+    weeklyLimit: 'You already have {count} active matches that week. Cancel one or pick another week.',
     title: 'Schedule Match',
     matchName: 'Match Name',
     matchNamePlaceholder: 'Wednesday Night Lights',

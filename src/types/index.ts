@@ -12,8 +12,6 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   role?: PlayerRole;
-  /** Set manually in Firebase Console — only admins can host matches */
-  admin?: boolean;
   /** True after the user finishes first-time profile setup */
   onboardingComplete?: boolean;
   createdAt?: string;

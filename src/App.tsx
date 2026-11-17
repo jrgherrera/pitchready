@@ -229,6 +229,7 @@ export default function App() {
         {editingMatchId && (
           <CreateMatchModal
             form={createForm}
+            uid={profile.id}
             creating={creatingMatch}
             editing
             onChange={setCreateForm}
@@ -255,7 +256,6 @@ export default function App() {
             matches={matches}
             matchesLoading={matchesLoading}
             players={allPlayers}
-            canHostMatches={Boolean(profile.admin)}
             canManage={canManage}
             onOpenMatch={setActiveMatchId}
             onCreateMatch={() => setShowCreateModal(true)}
@@ -267,7 +267,6 @@ export default function App() {
           <MatchesTab
             matches={matches}
             matchesLoading={matchesLoading}
-            canHostMatches={Boolean(profile.admin)}
             onOpenMatch={setActiveMatchId}
             onCreateMatch={() => setShowCreateModal(true)}
           />
@@ -309,9 +308,10 @@ export default function App() {
 
       <BottomNav activeTab={activeTab} onChangeTab={changeTab} />
 
-      {showCreateModal && profile.admin && (
+      {showCreateModal && (
         <CreateMatchModal
           form={createForm}
+          uid={profile.id}
           creating={creatingMatch}
           onChange={setCreateForm}
           onClose={() => setShowCreateModal(false)}
