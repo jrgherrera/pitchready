@@ -102,7 +102,12 @@ export function rosterEntryFor(
   };
 }
 
-export function getOccupiedCount(match: MatchData) {
+/**
+ * Roster players plus their +1s — the one definition of occupancy. `Pick` rather than `MatchData`
+ * so a payload builder holding only the next arrays can use it too; `occupiedCount` is the single
+ * number link-holders see, and it must not be computed two ways.
+ */
+export function getOccupiedCount(match: Pick<MatchData, 'joinedPlayerIds' | 'guests'>) {
   return match.joinedPlayerIds.length + (match.guests?.length ?? 0);
 }
 

@@ -9,12 +9,22 @@ import type {
   UserProfile,
 } from '../../../types';
 import { toPreview } from '../../../utils/matchPreview';
-import { computeMemberIds, promoteFromWaitlist, rosterEntryFor } from '../../../utils/matches';
+import {
+  computeMemberIds,
+  getOccupiedCount,
+  promoteFromWaitlist,
+  rosterEntryFor,
+} from '../../../utils/matches';
 
 /**
- * Payload shaping for every match write, kept pure and free of any Firestore handle so
- * `matchWrites.check.ts` can run it under `tsx` — importing `src/lib/firebase` there blows up
- * on `import.meta.env`. `matchWrites.ts` is the only caller that talks to Firestore.
+ * Payload shaping for every match write. Pure in the sense that matters here: it does no I/O and
+ * holds no Firestore handle, so `matchWrites.check.ts` can run it under `tsx`. It is not free of
+ * the SDK — `deleteField` above is a value from `firebase/firestore`, which loads fine in Node;
+ * what cannot load there is `src/lib/firebase`, whose client reads `import.meta.env` at import
+ * time. That is the line this module keeps on the right side of, and the reason it is separate
+ * from `matchWrites.ts`, the only module here that talks to Firestore.
+ *
+ * (It does reach i18n transitively, via `utils/matches` — hence `NODE_NO_WARNINGS=1` on the check.)
  */
 
 /**
@@ -75,7 +85,7 @@ function rosterFields(
 }
 
 function occupied(joinedPlayerIds: string[], guests: MatchGuest[]): PreviewCountPatch {
-  return { occupiedCount: joinedPlayerIds.length + guests.length };
+  return { occupiedCount: getOccupiedCount({ joinedPlayerIds, guests }) };
 }
 
 export function buildCreatePayload(
@@ -200,28 +210,39 @@ export function buildLeavePatch(
   };
 }
 
-/** A changed +1 list. Removing a guest frees a spot, so the waitlist is reconciled too. */
+/**
+ * A changed +1 list.
+ *
+ * Only a removal reconciles the waitlist. An add passes the roster arrays through untouched, even
+ * when the match has free spots and people waiting: promoting someone because a *different*
+ * member brought a guest is not a behavior anything asks for, and it is reachable — capacity 12,
+ * 9 joined, 3 waiting, one member clicks +1 and two strangers land on the roster. Whether free
+ * spots should auto-promote at all is a product question, and raising `capacity` through
+ * `buildDetailsPatch` does not promote either, so this path does not get to decide it alone.
+ */
 export function buildGuestListPatch(
   match: Pick<
     MatchData,
-    'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'capacity'
+    'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'capacity' | 'guests'
   >,
   guests: MatchGuest[],
 ): { matchPatch: MatchRosterPatch; previewPatch: PreviewCountPatch } {
-  const promoted = promoteFromWaitlist(
-    match.joinedPlayerIds,
-    match.waitlistPlayerIds ?? [],
-    guests,
-    match.capacity,
-  );
+  const freedASpot = guests.length < (match.guests ?? []).length;
+
+  const { joinedPlayerIds, waitlistPlayerIds } = freedASpot
+    ? promoteFromWaitlist(
+        match.joinedPlayerIds,
+        match.waitlistPlayerIds ?? [],
+        guests,
+        match.capacity,
+      )
+    : {
+        joinedPlayerIds: match.joinedPlayerIds,
+        waitlistPlayerIds: match.waitlistPlayerIds ?? [],
+      };
 
   return {
-    matchPatch: rosterFields(
-      match,
-      promoted.joinedPlayerIds,
-      promoted.waitlistPlayerIds,
-      guests,
-    ),
-    previewPatch: occupied(promoted.joinedPlayerIds, guests),
+    matchPatch: rosterFields(match, joinedPlayerIds, waitlistPlayerIds, guests),
+    previewPatch: occupied(joinedPlayerIds, guests),
   };
 }

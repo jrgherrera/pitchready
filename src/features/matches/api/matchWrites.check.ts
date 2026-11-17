@@ -6,8 +6,10 @@
  * which reads `import.meta.env` and cannot be loaded outside Vite.
  */
 import assert from 'node:assert/strict';
+import { FieldValue } from 'firebase/firestore';
 import {
   buildCreatePayload,
+  buildDetailsPatch,
   buildGuestListPatch,
   buildJoinPatch,
   buildLeavePatch,
@@ -119,6 +121,76 @@ const fullMatchWithWaitlist: MatchData = {
   assert.equal(matchPatch.guests.length, 2);
   assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'u2']);
   assert.equal(previewPatch.occupiedCount, 4);
+}
+
+// An add NEVER promotes, not even with free spots and people waiting. Reachable state: capacity
+// was raised to 12 with 9 joined and 3 waiting, then one member brings a +1 — the two strangers
+// behind them must not be dragged onto the roster by someone else's click.
+{
+  const roomy: MatchData = {
+    ...match,
+    capacity: 12,
+    joinedPlayerIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9'],
+    waitlistPlayerIds: ['w1', 'w2', 'w3'],
+    guests: [],
+  };
+  const guests = [{ id: 'g9', addedBy: 'u2', createdAt: 'z' }];
+  const { matchPatch, previewPatch } = buildGuestListPatch(roomy, guests);
+
+  assert.deepEqual(matchPatch.joinedPlayerIds, roomy.joinedPlayerIds, 'roster untouched');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1', 'w2', 'w3'], 'nobody promoted');
+  assert.equal(previewPatch.occupiedCount, 10, 'nine players and the new guest');
+
+  // ...and the same list, one guest shorter, does promote: a removal is what frees a spot.
+  const removed = buildGuestListPatch({ ...roomy, guests }, []);
+  assert.deepEqual(removed.matchPatch.waitlistPlayerIds, [], 'the free spots fill up');
+  assert.equal(removed.matchPatch.joinedPlayerIds.length, 12);
+}
+
+// Editing the details: the preview tracks every field it is allowed to hold, and nothing else.
+{
+  const form: CreateMatchForm = {
+    title: '',
+    location: null,
+    date: '2026-11-19',
+    time: '21:00',
+    capacity: 1,
+    duration: 90,
+    price: '',
+  };
+  const { matchPatch, previewPatch } = buildDetailsPatch(form, 'Partido');
+
+  assert.equal(matchPatch.title, 'Partido', 'an empty title falls back to the default');
+  assert.equal(matchPatch.capacity, 2, 'capacity floors at 2 on the edit path too');
+  assert.equal(
+    buildDetailsPatch({ ...form, capacity: 0 }, 'Partido').matchPatch.capacity,
+    10,
+    'a cleared capacity field is falsy, so it takes the default of 10, not the floor',
+  );
+  assert.ok(matchPatch.price instanceof FieldValue, "a blank price is deleted, not written as ''");
+  assert.ok(matchPatch.location instanceof FieldValue, 'a cleared location is deleted');
+  assert.equal(typeof matchPatch.updatedAt, 'string');
+
+  // The preview mirrors the details, including the deletions — a stale price on the public
+  // document is a lie to everyone holding the link.
+  assert.equal(previewPatch.title, 'Partido');
+  assert.equal(previewPatch.capacity, 2);
+  assert.equal(previewPatch.duration, 90);
+  assert.ok(previewPatch.price instanceof FieldValue);
+  assert.ok(previewPatch.location instanceof FieldValue);
+  assert.ok(!('updatedAt' in previewPatch), 'updatedAt is not a preview field');
+  for (const leaked of PRIVATE_FIELDS) {
+    assert.ok(!(leaked in previewPatch), `${leaked} must not reach the preview`);
+  }
+
+  // A price and a pin that were set come through as values, not sentinels.
+  const pinned = buildDetailsPatch(
+    { ...form, title: 'Viernes', price: 50, location: { lat: 1, lng: 2, address: 'Pitch' } },
+    'Partido',
+  );
+  assert.equal(pinned.previewPatch.title, 'Viernes');
+  assert.equal(pinned.previewPatch.price, 50);
+  assert.deepEqual(pinned.previewPatch.location, { lat: 1, lng: 2, address: 'Pitch' });
 }
 
 // A created match carries the membership fields from birth, and its preview carries none of them.

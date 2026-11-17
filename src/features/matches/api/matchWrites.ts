@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, MatchGuest, RosterMember, UserProfile } from '../../../types';
-import { rosterEntryFor } from '../../../utils/matches';
+import { isWaitlistFull, rosterEntryFor } from '../../../utils/matches';
 import {
   buildCreatePayload,
   buildDetailsPatch,
@@ -129,12 +129,15 @@ function isRejection(error: unknown): boolean {
  * which may be stale by the time it commits. When two people take the last spot at once the
  * rules reject the loser — so a rejected roster join retries once as a waitlist join rather
  * than surfacing an error.
+ *
+ * Returns `'waitlist-full'` when the fallback has nowhere to put them: that is a message for the
+ * user, not a Firestore error, and the caller owns the wording.
  */
 export async function joinMatch(
   match: MatchData,
   member: { id: string } & RosterMember,
   target: 'roster' | 'waitlist',
-): Promise<void> {
+): Promise<'joined' | 'waitlist-full'> {
   const attempt = async (as: 'roster' | 'waitlist') => {
     const { matchPatch, previewPatch } = buildJoinPatch(match, member, as);
     await commitRosterChange(match.id, matchPatch, previewPatch);
@@ -142,14 +145,17 @@ export async function joinMatch(
 
   try {
     await attempt(target);
+    return 'joined';
   } catch (error) {
     if (target === 'roster' && isRejection(error)) {
+      // The same guard the caller applies when it picks 'waitlist' itself. The count is as stale
+      // as everything else the joiner can see, but it is the best available and beats a raw error.
+      if (isWaitlistFull(match)) return 'waitlist-full';
       try {
         await attempt('waitlist');
-        return;
+        return 'joined';
       } catch (retryError) {
         handleFirestoreError(retryError, OperationType.UPDATE, `matches/${match.id}`);
-        return;
       }
     }
     handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);

@@ -108,7 +108,18 @@ export function useMatchActions(
       if (action === 'leave') {
         await leaveMatch(match, profile.id);
       } else {
-        await joinMatch(match, { id: profile.id, ...rosterEntryFor(profile) }, action);
+        const result = await joinMatch(
+          match,
+          { id: profile.id, ...rosterEntryFor(profile) },
+          action,
+        );
+        // Lost the race for the last spot and the waitlist had filled up too. Same message as
+        // the up-front guard above — the counts we decided from were simply stale.
+        if (result === 'waitlist-full') {
+          setSignUpStatus('idle');
+          alert(t('matches.waitlistFull'));
+          return;
+        }
       }
 
       if (joining) {
