@@ -24,6 +24,7 @@ export function UpgradeAccountScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [pending, setPending] = useState<'google' | 'email' | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   return (
@@ -34,10 +35,13 @@ export function UpgradeAccountScreen({
         <button
           type="button"
           disabled={busy}
-          onClick={() => void onGoogle()}
+          onClick={() => {
+            setPending('google');
+            void onGoogle();
+          }}
           className="w-full bg-[#d4f000] text-[#001710] font-anton py-4 uppercase tracking-wider rounded-lg text-base flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          {busy ? (
+          {busy && pending === 'google' ? (
             <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
             <>
@@ -65,6 +69,7 @@ export function UpgradeAccountScreen({
                 return;
               }
               setLocalError(null);
+              setPending('email');
               void onPassword(email, password);
             }}
             className="flex flex-col gap-3"
@@ -106,7 +111,11 @@ export function UpgradeAccountScreen({
               disabled={busy}
               className="w-full border border-[#1f453a] hover:bg-[#0a1c17] text-white font-anton py-3 uppercase tracking-wider rounded-lg text-sm disabled:opacity-60"
             >
-              {t('auth.upgradeWithEmail')}
+              {busy && pending === 'email' ? (
+                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+              ) : (
+                t('auth.upgradeWithEmail')
+              )}
             </button>
           </form>
         )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getStoredGuestName } from './utils/guestName';
 import { AppHeader, BottomNav } from './components/layout/AppShell';
 import { LoadingScreen } from './components/ui/LoadingScreen';
 import { ForgotPasswordForm } from './features/auth/components/ForgotPasswordForm';
@@ -169,7 +170,7 @@ export default function App() {
   if (gate === 'onboarding' && user) {
     return (
       <OnboardingScreen
-        initialName={profile?.name || user.displayName || ''}
+        initialName={profile?.name || user.displayName || getStoredGuestName()}
         busy={authBusy}
         error={authError}
         onSubmit={completeOnboarding}

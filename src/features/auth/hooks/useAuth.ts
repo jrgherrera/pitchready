@@ -269,6 +269,8 @@ export function useAuth() {
   const refreshUser = async () => {
     if (!user) return;
     await reload(user);
+    // emailVerified is also a token claim the match create rule reads; reload does not refresh it.
+    await user.getIdToken(true);
     // reload mutates the same User object, so setUser alone bails out; force the gate to re-evaluate.
     setUser(auth.currentUser);
     setRefreshTick((n) => n + 1);
