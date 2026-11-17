@@ -45,6 +45,16 @@ service cloud.firestore {
           && (!changed.hasAny(['roster'])
             || request.resource.data.roster.diff(resource.data.get('roster', {})).affectedKeys()
               .hasOnly([request.auth.uid]))
+          // Both memberIds constraints are needed; each looks redundant beside the other.
+          // Derived: memberIds must equal creator + joined + waitlist, so it cannot be an independent grant
+          // (symdiff alone allows memberIds + [me] with the arrays untouched).
+          // Symdiff: only the caller may enter or leave, since joinedPlayerIds contents are otherwise
+          // unconstrained (derived alone allows wiping the roster with a matching memberIds).
+          && (!changed.hasAny(['memberIds'])
+            || request.resource.data.memberIds.toSet() ==
+                 [request.resource.data.get('creatorId', '')].toSet()
+                   .union(request.resource.data.get('joinedPlayerIds', []).toSet())
+                   .union(request.resource.data.get('waitlistPlayerIds', []).toSet()))
           && (!changed.hasAny(['memberIds'])
             || request.resource.data.memberIds.toSet()
                  .difference(resource.data.get('memberIds', []).toSet())

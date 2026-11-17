@@ -30,6 +30,7 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, 'matches/legacy'), { creatorId: 'host', joinedPlayerIds: nineIds });
   await setDoc(doc(db, 'matches/guestfull'), { creatorId: 'host', capacity: 10, joinedPlayerIds: nineIds, guests: [{ name: 'g', addedBy: 'host' }] });
   await setDoc(doc(db, 'matches/guestok'), { creatorId: 'host', capacity: 10, joinedPlayerIds: nineIds.slice(0, 8), guests: [{ name: 'g', addedBy: 'host' }] });
+  await setDoc(doc(db, 'matches/joinme'), { creatorId: 'host', capacity: 10, joinedPlayerIds: ['host'], memberIds: ['host'], roster: { host: { name: 'H' } } });
   await setDoc(doc(db, 'matches/over'), { creatorId: 'host', capacity: 10, joinedPlayerIds: elevenIds });
 });
 
@@ -76,6 +77,12 @@ await assertSucceeds(updateDoc(doc(playerDb, 'matchPreviews/m1'), { occupiedCoun
 await assertFails(updateDoc(doc(playerDb, 'matchPreviews/m1'), { occupiedCount: 9 }));
 // memberIds is the read gate: a non-owner may only add or remove themselves.
 await assertFails(updateDoc(doc(strangerDb, 'matches/m1'), { memberIds: ['stranger'], updatedAt: 'x' }));
+// Self-admission with the arrays untouched: symdiff is {caller} but memberIds is not derived from them.
+await assertFails(updateDoc(doc(strangerDb, 'matches/m1'), { memberIds: ['host', 'player', 'stranger'], updatedAt: 'x' }));
+// Roster wipe with a matching memberIds: derived holds, but player is removed by someone else (symdiff).
+await assertFails(updateDoc(doc(strangerDb, 'matches/m1'), { joinedPlayerIds: ['stranger'], memberIds: ['host', 'stranger'], updatedAt: 'x' }));
+// A legitimate join carrying the array and the matching memberIds.
+await assertSucceeds(updateDoc(doc(strangerDb, 'matches/joinme'), { joinedPlayerIds: ['host', 'stranger'], memberIds: ['host', 'stranger'], 'roster.stranger': { name: 'S' }, updatedAt: 'x' }));
 await assertFails(updateDoc(doc(strangerDb, 'matches/m1'), { memberIds: ['host', 'player', 'stranger', 'other'], updatedAt: 'x' }));
 await assertFails(updateDoc(doc(playerDb, 'matches/m1'), { 'roster.host': { name: 'hijacked' }, updatedAt: 'x' }));
 await assertFails(updateDoc(doc(playerDb, 'matches/m1'), { roster: {}, updatedAt: 'x' }));
