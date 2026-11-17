@@ -101,6 +101,9 @@ export function useAuth() {
         return;
       }
 
+      // Drop a previous user's profile (e.g. a guest's synthesized one) so it cannot
+      // stand in for this user and flash onboarding; keep our own across repeat events.
+      setProfile((prev) => (prev?.id === firebaseUser.uid ? prev : null));
       setProfileLoading(true);
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       unsubProfile = onSnapshot(

@@ -23,6 +23,13 @@ const setStorage = (s: Storage | undefined) =>
   assert.equal(getStoredGuestName(), '', 'cleared storage degrades, it does not fail');
 }
 
+// A padded value already in storage reads back trimmed.
+{
+  const store = new Map<string, string>([['pitchready.guestName', '  Ana  ']]);
+  setStorage(fakeStorage(store));
+  assert.equal(getStoredGuestName(), 'Ana', 'padded stored name is trimmed on read');
+}
+
 // A blank or whitespace name is not storable — joining requires a real one.
 {
   const store = new Map<string, string>();
