@@ -6,6 +6,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, setLogLevel, setDoc, updat
 setLogLevel('silent'); // assertFails checks the permission-denied code, not the log
 
 const tenIds = Array.from({ length: 10 }, (_, i) => `p${i}`);
+const nineIds = tenIds.slice(0, 9);
 const elevenIds = [...tenIds, 'over'];
 const validPreviewPayload = () => ({
   id: 'm1', title: 'Friday', date: new Date(), capacity: 10, occupiedCount: 1, creatorName: 'H',
@@ -26,6 +27,7 @@ await env.withSecurityRulesDisabled(async (ctx) => {
     creatorId: 'host', title: 'Friday', capacity: 10, joinedPlayerIds: ['host'], roster: { host: { name: 'H' } },
   });
   await setDoc(doc(db, 'matches/full'), { creatorId: 'host', capacity: 10, joinedPlayerIds: tenIds });
+  await setDoc(doc(db, 'matches/legacy'), { creatorId: 'host', joinedPlayerIds: nineIds });
   await setDoc(doc(db, 'matches/over'), { creatorId: 'host', capacity: 10, joinedPlayerIds: elevenIds });
 });
 
@@ -68,6 +70,10 @@ await assertFails(updateDoc(doc(playerDb, 'matches/m1'), { roster: {}, updatedAt
 // Capacity cannot be exceeded, but an over-capacity match can still be left.
 await assertFails(updateDoc(doc(playerDb, 'matches/full'), { joinedPlayerIds: [...tenIds, 'player'], updatedAt: 'x' }));
 await assertSucceeds(updateDoc(doc(overDb, 'matches/over'), { joinedPlayerIds: tenIds, updatedAt: 'x' }));
+
+// No capacity field: counts as the default 10 — a join up to 10 works, past 10 is denied.
+await assertSucceeds(updateDoc(doc(playerDb, 'matches/legacy'), { joinedPlayerIds: [...nineIds, 'player'], updatedAt: 'x' }));
+await assertFails(updateDoc(doc(overDb, 'matches/legacy'), { joinedPlayerIds: [...nineIds, 'player', 'over'], updatedAt: 'x' }));
 
 // matches delete: `allow delete: if isMatchOwner()` — non-creator denied
 await assertFails(deleteDoc(doc(playerDb, 'matches/m1')));

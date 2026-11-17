@@ -49,10 +49,11 @@ service cloud.firestore {
         return d.joinedPlayerIds.size() + d.get('guests', []).size();
       }
 
+      // A doc with no capacity counts as the app's default of 10 (createMatch's fallback), not as unreadable.
       // Never grow past capacity, but a legacy or host-shrunk match already over it can still shrink
       function withinCapacity() {
         return occupied(request.resource.data) <= occupied(resource.data)
-          || occupied(request.resource.data) <= request.resource.data.capacity;
+          || occupied(request.resource.data) <= request.resource.data.get('capacity', 10);
       }
 
       // Super admin first: legacy docs may lack creatorId, and a missing-key read denies
