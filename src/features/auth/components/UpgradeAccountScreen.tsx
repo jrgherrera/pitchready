@@ -23,11 +23,13 @@ export function UpgradeAccountScreen({
   const [showEmail, setShowEmail] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   return (
     <AuthLayout title={t('auth.upgradeTitle')} subtitle={t('auth.upgradeSubtitle')}>
       <div className="flex flex-col gap-4">
-        <AuthMessage error={error} />
+        <AuthMessage error={localError || error} />
 
         <button
           type="button"
@@ -58,6 +60,11 @@ export function UpgradeAccountScreen({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (password !== confirmPassword) {
+                setLocalError(t('auth.passwordsDoNotMatch'));
+                return;
+              }
+              setLocalError(null);
               void onPassword(email, password);
             }}
             className="flex flex-col gap-3"
@@ -82,6 +89,17 @@ export function UpgradeAccountScreen({
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+            />
+            <input
+              className={authInputClass}
+              type="password"
+              required
+              minLength={6}
+              autoComplete="new-password"
+              aria-label={t('auth.confirmPassword')}
+              placeholder={t('auth.confirmPassword')}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
             />
             <button
               type="submit"

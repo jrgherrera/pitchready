@@ -51,6 +51,7 @@ export function useAuth() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [, setRefreshTick] = useState(0);
   // Lets a link, which fires no onAuthStateChanged, re-run the same per-user setup.
   const applyUserRef = useRef<((u: FirebaseUser) => void) | null>(null);
 
@@ -268,7 +269,9 @@ export function useAuth() {
   const refreshUser = async () => {
     if (!user) return;
     await reload(user);
+    // reload mutates the same User object, so setUser alone bails out; force the gate to re-evaluate.
     setUser(auth.currentUser);
+    setRefreshTick((n) => n + 1);
   };
 
   const completeOnboarding = async (name: string, role: PlayerRole) => {
