@@ -1,7 +1,9 @@
 /** Characterization of firestore.rules — run: npm run check:rules (needs the Firestore emulator) */
 import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setLogLevel, setDoc, updateDoc } from 'firebase/firestore';
+
+setLogLevel('silent'); // assertFails checks the permission-denied code, not the log
 
 const env = await initializeTestEnvironment({
   projectId: 'pitchready-rules',
@@ -37,7 +39,10 @@ await assertFails(updateDoc(doc(playerDb, 'matches/m1'), { title: 'hijacked' }))
 // matches delete: `allow delete: if isMatchOwner()` — non-creator denied
 await assertFails(deleteDoc(doc(playerDb, 'matches/m1')));
 // matches delete: isMatchOwner() — creatorId == auth.uid
+// NOTE: m1 no longer exists past this line. Anything appended below must seed its own fixtures.
 await assertSucceeds(deleteDoc(doc(hostDb, 'matches/m1')));
+// users update: own-doc update allowed (positive control: proves users/player is seeded, so the next denial is an update)
+await assertSucceeds(setDoc(doc(playerDb, 'users/player'), { displayName: 'x' }, { merge: true }));
 // users update: admin flag must stay unchanged (false -> true denied on an existing own doc)
 await assertFails(setDoc(doc(playerDb, 'users/player'), { admin: true }, { merge: true }));
 
