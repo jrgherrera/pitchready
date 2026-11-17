@@ -4,6 +4,7 @@ import { LoadingScreen } from './components/ui/LoadingScreen';
 import { ForgotPasswordForm } from './features/auth/components/ForgotPasswordForm';
 import { LoginScreen } from './features/auth/components/LoginScreen';
 import { OnboardingScreen } from './features/auth/components/OnboardingScreen';
+import { UpgradeAccountScreen } from './features/auth/components/UpgradeAccountScreen';
 import { VerifyEmailScreen } from './features/auth/components/VerifyEmailScreen';
 import { useAuth } from './features/auth/hooks/useAuth';
 import { CreateMatchModal } from './features/matches/components/CreateMatchModal';
@@ -38,6 +39,9 @@ export default function App() {
     clearMessages,
     signUp,
     signIn,
+    isGuest,
+    upgradeGuestWithGoogle,
+    upgradeGuestWithPassword,
     requestMagicLink,
     resetPassword,
     loginWithGoogle,
@@ -57,8 +61,14 @@ export default function App() {
   const [activeMatchId, setActiveMatchId] = useState<string | null>(
     () => matchIdFromPath(window.location.pathname),
   );
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [superAdminMode, setSuperAdminMode] = useState(getStoredSuperAdminMode);
+
+  // Once linked the guest is gone: drop the screen so it cannot reappear for a later guest
+  useEffect(() => {
+    if (!isGuest) setShowUpgrade(false);
+  }, [isGuest]);
 
   // Keep the address bar on the open match so a refresh or a copied URL lands back here
   useEffect(() => {
@@ -175,6 +185,25 @@ export default function App() {
     return <LoadingScreen />;
   }
 
+  if (isGuest && showUpgrade) {
+    return (
+      <UpgradeAccountScreen
+        busy={authBusy}
+        error={authError}
+        onGoogle={async () => {
+          await upgradeGuestWithGoogle();
+        }}
+        onPassword={async (email, password) => {
+          await upgradeGuestWithPassword(email, password);
+        }}
+        onBack={() => {
+          clearMessages();
+          setShowUpgrade(false);
+        }}
+      />
+    );
+  }
+
   const activeMatch = matches.find((m) => m.id === activeMatchId);
   const canManage = (match: MatchData) => canManageMatch(match, profile, superAdminMode);
 
@@ -256,6 +285,14 @@ export default function App() {
               storeSuperAdminMode(enabled);
               setSuperAdminMode(enabled);
             }}
+            onUpgrade={
+              isGuest
+                ? () => {
+                    clearMessages();
+                    setShowUpgrade(true);
+                  }
+                : undefined
+            }
             onSave={(e) => {
               e.preventDefault();
               void updateUserProfile(profile);

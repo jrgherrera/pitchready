@@ -45,6 +45,13 @@ const enCatalog = {
     signIn: 'Sign In',
     signUp: 'Sign Up',
     signInWithGoogle: 'Sign in with Google',
+    upgradeTitle: 'SAVE YOUR ACCOUNT',
+    upgradeSubtitle: 'Turn this guest into a real account. Your matches stay with you.',
+    upgradeWithGoogle: 'Continue with Google',
+    upgradeWithEmail: 'Use email and password',
+    upgradeVerifyNote:
+      'Google accounts are ready right away. With email you must verify your address before you can create matches.',
+    upgradeBack: 'Not now',
     emailAddress: 'Email Address',
     emailPlaceholder: 'yourname@domain.com',
     password: 'Password',
@@ -98,6 +105,8 @@ const enCatalog = {
         'Google sign-in is not enabled. Enable the Google provider in Firebase Authentication → Sign-in method.',
       guestDisabled:
         'Joining as a guest is not available right now. Please sign in with an account instead.',
+      credentialInUse:
+        'That account already exists. Sign out and sign in with it instead; this guest history stays where it is.',
       accountExistsDifferent:
         'An account already exists with this email using a different sign-in method.',
       network: 'Network error. Check your connection and try again.',
@@ -229,6 +238,9 @@ const enCatalog = {
     registered: '{{count}} REGISTERED',
   },
   settings: {
+    upgradeTitle: 'Save your account',
+    upgradeHint: 'You joined as a guest. Create an account to keep your matches on any device.',
+    upgradeButton: 'Create account',
     title: 'Player Profile',
     subtitle: 'Customize your pitch position and personal info.',
     name: 'Name',

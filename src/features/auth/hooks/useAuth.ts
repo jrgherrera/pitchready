@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   onAuthStateChanged,
   reload,
@@ -29,6 +29,8 @@ import {
   signInWithEmail,
   signInWithGoogle,
   signUpWithEmail,
+  upgradeWithGoogle,
+  upgradeWithPassword,
 } from '../api/authActions';
 import { getStoredGuestName, storeGuestName } from '../../../utils/guestName';
 import {
@@ -49,13 +51,26 @@ export function useAuth() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  // Lets a link, which fires no onAuthStateChanged, re-run the same per-user setup.
+  const applyUserRef = useRef<((u: FirebaseUser) => void) | null>(null);
+
+  // A link keeps the uid, so the "keep own profile on same uid" rule below would keep the
+  // synthesized guest profile. Clear it explicitly first, then load the real one.
+  const reapplyAfterLink = () => {
+    const current = auth.currentUser;
+    if (!current || !applyUserRef.current) return;
+    setProfile(null);
+    setUser(current);
+    applyUserRef.current(current);
+  };
 
   useEffect(() => {
     let cancelled = false;
 
     async function completePendingAuth() {
       try {
-        await completeGoogleRedirectIfPresent();
+        const redirect = await completeGoogleRedirectIfPresent();
+        if (!cancelled && redirect?.operationType === 'link') reapplyAfterLink();
         await completeMagicLinkIfPresent();
       } catch (error) {
         if (!cancelled) {
@@ -74,18 +89,9 @@ export function useAuth() {
   useEffect(() => {
     let unsubProfile: (() => void) | undefined;
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
+    const applyUser = (firebaseUser: FirebaseUser) => {
       unsubProfile?.();
       unsubProfile = undefined;
-
-      if (!firebaseUser) {
-        setProfile(null);
-        setHasExistingUserDoc(false);
-        setProfileLoading(false);
-        setAuthLoading(false);
-        return;
-      }
 
       if (isGuest(firebaseUser)) {
         // Anonymous attendees have no users/{uid} doc (rules forbid it): synthesize locally.
@@ -144,9 +150,25 @@ export function useAuth() {
           setAuthError(getAuthErrorMessage(err));
         },
       );
+    };
+    applyUserRef.current = applyUser;
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (!firebaseUser) {
+        unsubProfile?.();
+        unsubProfile = undefined;
+        setProfile(null);
+        setHasExistingUserDoc(false);
+        setProfileLoading(false);
+        setAuthLoading(false);
+        return;
+      }
+      applyUser(firebaseUser);
     });
 
     return () => {
+      applyUserRef.current = null;
       unsubProfile?.();
       unsubscribe();
     };
@@ -187,6 +209,22 @@ export function useAuth() {
       await signInAsGuestAction();
     });
   };
+
+  const upgradeGuest = async (action: () => Promise<unknown>) => {
+    await runAuthAction(async () => {
+      try {
+        await action();
+      } finally {
+        // The link may succeed and a later step (the verification email) fail: still switch over.
+        if (auth.currentUser && !isGuest(auth.currentUser)) reapplyAfterLink();
+      }
+    });
+  };
+
+  const upgradeGuestWithGoogle = () => upgradeGuest(upgradeWithGoogle);
+
+  const upgradeGuestWithPassword = (email: string, password: string) =>
+    upgradeGuest(() => upgradeWithPassword(email, password));
 
   const requestMagicLink = async (email: string) => {
     await runAuthAction(async () => {
@@ -292,6 +330,8 @@ export function useAuth() {
     signUp,
     signIn,
     signInAsGuest,
+    upgradeGuestWithGoogle,
+    upgradeGuestWithPassword,
     requestMagicLink,
     resetPassword,
     loginWithGoogle,

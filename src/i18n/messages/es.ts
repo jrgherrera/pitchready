@@ -44,6 +44,13 @@ export const es: Messages = {
     signIn: 'Iniciar sesión',
     signUp: 'Registrarse',
     signInWithGoogle: 'Iniciar sesión con Google',
+    upgradeTitle: 'GUARDA TU CUENTA',
+    upgradeSubtitle: 'Convierte este acceso de invitado en una cuenta. Tus partidos te siguen.',
+    upgradeWithGoogle: 'Continuar con Google',
+    upgradeWithEmail: 'Usar correo y contraseña',
+    upgradeVerifyNote:
+      'Las cuentas de Google quedan listas al instante. Con correo debes verificar tu dirección antes de poder crear partidos.',
+    upgradeBack: 'Ahora no',
     emailAddress: 'Correo electrónico',
     emailPlaceholder: 'tunombre@dominio.com',
     password: 'Contraseña',
@@ -99,6 +106,8 @@ export const es: Messages = {
         'Google no está habilitado. Activa el proveedor en Authentication → Sign-in method.',
       guestDisabled:
         'Entrar como invitado no está disponible ahora. Inicia sesión con una cuenta.',
+      credentialInUse:
+        'Esa cuenta ya existe. Cierra sesión e inicia sesión con ella; el historial de este invitado se queda donde está.',
       accountExistsDifferent:
         'Ya existe una cuenta con este correo usando otro método de acceso.',
       network: 'Error de red. Comprueba tu conexión e inténtalo de nuevo.',
@@ -230,6 +239,9 @@ export const es: Messages = {
     registered: '{{count}} REGISTRADOS',
   },
   settings: {
+    upgradeTitle: 'Guarda tu cuenta',
+    upgradeHint: 'Entraste como invitado. Crea una cuenta para conservar tus partidos en cualquier dispositivo.',
+    upgradeButton: 'Crear cuenta',
     title: 'Perfil de jugador',
     subtitle: 'Personaliza tu posición e información.',
     name: 'Nombre',

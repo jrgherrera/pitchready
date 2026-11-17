@@ -12,6 +12,8 @@ interface SettingsTabProps {
   onSuperAdminModeChange: (enabled: boolean) => void;
   onSave: (e: React.FormEvent) => void;
   onLogout: () => void;
+  /** Set only for guests. */
+  onUpgrade?: () => void;
 }
 
 export function SettingsTab({
@@ -21,6 +23,7 @@ export function SettingsTab({
   onSuperAdminModeChange,
   onSave,
   onLogout,
+  onUpgrade,
 }: SettingsTabProps) {
   const { t, localePreference, setLocalePreference } = useI18n();
 
@@ -34,6 +37,22 @@ export function SettingsTab({
           {t('settings.subtitle')}
         </p>
       </header>
+
+      {onUpgrade && (
+        <div className="bg-[#0a1c17] border border-[#d4f000]/40 p-5 rounded-xl space-y-3 match-card-shadow">
+          <h3 className="font-anton uppercase tracking-wider text-[#d4f000]">
+            {t('settings.upgradeTitle')}
+          </h3>
+          <p className="text-xs text-gray-400">{t('settings.upgradeHint')}</p>
+          <button
+            type="button"
+            onClick={onUpgrade}
+            className="w-full bg-[#d4f000] hover:bg-[#c3dd00] text-[#001710] font-anton py-3 rounded-lg uppercase tracking-wider text-sm"
+          >
+            {t('settings.upgradeButton')}
+          </button>
+        </div>
+      )}
 
       <form
         onSubmit={onSave}
