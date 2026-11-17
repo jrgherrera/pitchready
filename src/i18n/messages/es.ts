@@ -201,6 +201,7 @@ export const es: Messages = {
     teamName: 'Equipo {{n}}',
   },
   createMatch: {
+    weeklyLimitUnchecked: 'No pudimos comprobar tu límite semanal. Aún puedes publicar.',
     weeklyLimit: 'Ya tienes {count} partidos activos esa semana. Cancela uno o elige otra semana.',
     title: 'Programar partido',
     matchName: 'Nombre del partido',

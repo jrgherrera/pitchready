@@ -82,21 +82,23 @@ export async function createMatch(
 /**
  * Active matches `uid` created in the Monday-Sunday week of `kickoff`. A query of its own, not
  * derived from the loaded match list, whose past half is capped and would undercount.
- * Filters on `creatorId` alone and narrows the week here: equality plus a `date` range would
- * need a composite index this project does not deploy.
+ * Needs the (creatorId, date) composite index declared in firestore.indexes.json.
  */
 export async function countMyActiveMatchesInWeek(uid: string, kickoff: Date): Promise<number> {
   const { start, end } = weekBounds(kickoff);
   try {
-    const snap = await getDocs(query(collection(db, MATCHES), where('creatorId', '==', uid)));
-    const inWeek = snap.docs
-      .map((d) => {
-        const data = d.data();
-        // Legacy docs still hold a 'YYYY-MM-DD' string
-        const date = data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date);
-        return { ...data, id: d.id, date } as MatchData;
-      })
-      .filter((m) => m.date >= start && m.date < end);
+    const snap = await getDocs(
+      query(
+        collection(db, MATCHES),
+        where('creatorId', '==', uid),
+        where('date', '>=', Timestamp.fromDate(start)),
+        where('date', '<', Timestamp.fromDate(end)),
+      ),
+    );
+    const inWeek = snap.docs.map((d) => {
+      const data = d.data();
+      return { ...data, id: d.id, date: (data.date as Timestamp).toDate() } as MatchData;
+    });
     return countCreatedActive(inWeek, uid);
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, MATCHES);

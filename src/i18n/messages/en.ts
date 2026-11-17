@@ -200,6 +200,7 @@ const enCatalog = {
     teamName: 'Team {{n}}',
   },
   createMatch: {
+    weeklyLimitUnchecked: "Couldn't check your weekly limit. You can still publish.",
     weeklyLimit: 'You already have {count} active matches that week. Cancel one or pick another week.',
     title: 'Schedule Match',
     matchName: 'Match Name',

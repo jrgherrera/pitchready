@@ -32,17 +32,21 @@ export function CreateMatchModal({
   const t = useT();
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [weekFull, setWeekFull] = useState(false);
+  const [lookupFailed, setLookupFailed] = useState(false);
 
   // Editing keeps the match's own slot, so only a new match is checked, and only once it has a date
   useEffect(() => {
     setWeekFull(false);
+    setLookupFailed(false);
     if (editing || !form.date) return;
     let stale = false;
     const [y, m, d] = form.date.split('-').map(Number);
     countMyActiveMatchesInWeek(uid, new Date(y, m - 1, d))
       .then((count) => !stale && setWeekFull(isWeekAtLimit(count)))
       .catch(() => {
-        // A failed lookup must not block hosting; the cap is a client-side check anyway
+        // Fail open, loudly: a transient read error must not block a host, but silence would
+        // make the cap look like it works while it does not
+        if (!stale) setLookupFailed(true);
       });
     return () => {
       stale = true;
@@ -141,6 +145,11 @@ export function CreateMatchModal({
                   value={form.date}
                   onChange={(e) => onChange({ ...form, date: e.target.value })}
                 />
+                {lookupFailed && (
+                  <p role="alert" className="text-[11px] text-amber-400 pt-0.5">
+                    {t('createMatch.weeklyLimitUnchecked')}
+                  </p>
+                )}
                 {weekFull && (
                   <p role="alert" className="text-[11px] text-red-400 pt-0.5">
                     {t('createMatch.weeklyLimit', { count: WEEKLY_MATCH_LIMIT })}
