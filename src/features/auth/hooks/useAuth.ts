@@ -19,15 +19,18 @@ import {
   completeGoogleRedirectIfPresent,
   completeMagicLinkIfPresent,
   getAuthErrorMessage,
+  isGuest,
   logoutUser,
   needsEmailVerification,
   resendEmailVerification,
   sendMagicLink,
   sendPasswordReset,
+  signInAsGuest as signInAsGuestAction,
   signInWithEmail,
   signInWithGoogle,
   signUpWithEmail,
 } from '../api/authActions';
+import { getStoredGuestName, storeGuestName } from '../../../utils/guestName';
 import {
   buildDefaultProfile,
   needsOnboarding,
@@ -79,6 +82,20 @@ export function useAuth() {
       if (!firebaseUser) {
         setProfile(null);
         setHasExistingUserDoc(false);
+        setProfileLoading(false);
+        setAuthLoading(false);
+        return;
+      }
+
+      if (isGuest(firebaseUser)) {
+        // Anonymous attendees have no users/{uid} doc (rules forbid it): synthesize locally.
+        setHasExistingUserDoc(false);
+        setProfile({
+          id: firebaseUser.uid,
+          name: getStoredGuestName(),
+          email: '',
+          photoURL: getAvatarUrl(firebaseUser.uid),
+        });
         setProfileLoading(false);
         setAuthLoading(false);
         return;
@@ -162,6 +179,12 @@ export function useAuth() {
     });
   };
 
+  const signInAsGuest = async () => {
+    await runAuthAction(async () => {
+      await signInAsGuestAction();
+    });
+  };
+
   const requestMagicLink = async (email: string) => {
     await runAuthAction(async () => {
       await sendMagicLink(email);
@@ -234,9 +257,18 @@ export function useAuth() {
     }
   };
 
+  /** Guests only: cache a name (typed, or recovered from a match roster) and show it. */
+  const setGuestName = (name: string) => {
+    const trimmed = name.trim();
+    if (!user || !isGuest(user) || !trimmed) return;
+    storeGuestName(trimmed);
+    setProfile((prev) => (prev ? { ...prev, name: trimmed } : prev));
+  };
+
   const gate: AuthGate = (() => {
     if (authLoading || (user && profileLoading && !profile)) return 'loading';
     if (!user) return 'unauthenticated';
+    if (isGuest(user)) return 'ready';
     if (needsEmailVerification(user)) return 'verify-email';
     if (needsOnboarding(profile, hasExistingUserDoc)) return 'onboarding';
     return 'ready';
@@ -248,12 +280,15 @@ export function useAuth() {
     setProfile,
     authLoading: gate === 'loading',
     gate,
+    isGuest: !!user && isGuest(user),
+    setGuestName,
     authError,
     statusMessage,
     authBusy,
     clearMessages,
     signUp,
     signIn,
+    signInAsGuest,
     requestMagicLink,
     resetPassword,
     loginWithGoogle,

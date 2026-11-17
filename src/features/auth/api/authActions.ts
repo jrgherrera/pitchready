@@ -6,6 +6,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   sendSignInLinkToEmail,
+  signInAnonymously,
   signInWithEmailAndPassword,
   signInWithEmailLink,
   signInWithPopup,
@@ -189,4 +190,14 @@ export function needsEmailVerification(user: User): boolean {
   if (user.providerData.some((p) => p.providerId === 'google.com')) return false;
   // Password / email-link accounts must verify.
   return isEmailProviderUser(user);
+}
+
+/** Call on a visitor's action (e.g. submitting an invitation), never on mere page view. */
+export async function signInAsGuest(): Promise<User> {
+  const credential = await signInAnonymously(auth);
+  return credential.user;
+}
+
+export function isGuest(user: User): boolean {
+  return user.isAnonymous;
 }
