@@ -84,6 +84,7 @@ export function MatchDetailView({
   // Names age: let a renamed member's own roster entry catch up when they open the match
   useEffect(() => {
     if (match.memberIds?.includes(profile.id)) void refreshOwnRosterEntry(match, profile);
+  // Deliberately keyed on match.id only: run once per opened match, not on every snapshot or profile change.
   }, [match.id]);
 
   const isPlayerInRoster = match.joinedPlayerIds.includes(profile.id);
@@ -493,7 +494,7 @@ export function MatchDetailView({
                                   match.roster?.[entry.addedBy]?.name ||
                                   t('common.player'),
                               })
-                            : entry.email || t('matches.privateEmail')}
+                            : t('matches.privateEmail')}
                         </p>
                       </div>
                     </div>
@@ -569,7 +570,7 @@ export function MatchDetailView({
                     <div>
                       <p className="font-bold text-sm text-amber-50">{entry.name}</p>
                       <p className="text-xs text-amber-200/60">
-                        {entry.email || t('matches.privateEmail')}
+                        {t('matches.privateEmail')}
                       </p>
                     </div>
                   </div>

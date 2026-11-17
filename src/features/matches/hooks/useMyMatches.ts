@@ -34,28 +34,34 @@ function toMatch(docSnap: { id: string; data: () => Record<string, unknown> }): 
  * even though the query itself is legitimate. That is the normal way a left match disappears.
  * We resubscribe, and the fresh query simply no longer returns it.
  *
- * It is swallowed only when this listener has already delivered a snapshot (so the query was
- * allowed a moment ago). A `permission-denied` on a listener that never succeeded, or that fails
- * again straight after resubscribing, is a real rules/query fault and is reported.
+ * Swallowing is bounded by a retry allowance (`retriesLeft`, max 1) that ONLY a server-confirmed
+ * snapshot (`!snapshot.metadata.fromCache`) can grant. Cached snapshots must not count: the app
+ * uses persistentLocalCache, so a freshly attached listener delivers cached data first, before the
+ * server has said anything about access. If that counted, every resubscribe would re-arm itself,
+ * the server would deny again, and a genuine fault (bad rules, revoked user, expired token) would
+ * loop forever, silently, showing stale cached matches. A cache snapshot proves nothing about
+ * current access; a server snapshot does. So: one resubscribe per server-confirmed success, and
+ * any other `permission-denied` (never succeeded, or denied again right after the retry) is
+ * reported as the real fault it is.
  */
 function listen(
   constraints: QueryConstraint[],
   onData: (matches: MatchData[]) => void,
 ): () => void {
   let unsubscribe = () => {};
-  let hadSnapshot = false;
+  let retriesLeft = 0;
   let stopped = false;
 
   const attach = () => {
     unsubscribe = onSnapshot(
       query(collection(db, 'matches'), ...constraints),
       (snapshot) => {
-        hadSnapshot = true;
+        if (!snapshot.metadata.fromCache) retriesLeft = 1;
         onData(snapshot.docs.map(toMatch));
       },
       (error: FirestoreError) => {
-        if (error.code === 'permission-denied' && hadSnapshot && !stopped) {
-          hadSnapshot = false; // a second denial before any snapshot is reported below
+        if (error.code === 'permission-denied' && retriesLeft > 0 && !stopped) {
+          retriesLeft -= 1;
           attach();
           return;
         }

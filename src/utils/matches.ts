@@ -1,6 +1,5 @@
 import { t } from '../i18n';
 import type { CreateMatchForm, MatchData, MatchGuest, PlayerRole, RosterMember, UserProfile } from '../types';
-import { getAvatarUrl } from './avatars';
 import { toDateTimeInputs } from './dates';
 
 /** Extra hold / waitlist spots beyond match capacity */
@@ -60,7 +59,6 @@ export type RosterEntry =
       kind: 'player';
       id: string;
       name: string;
-      email?: string;
       role?: PlayerRole;
       photoURL?: string;
       photoUserId: string;
@@ -78,7 +76,6 @@ export type RosterEntry =
       kind: 'waitlist';
       id: string;
       name: string;
-      email?: string;
       role?: PlayerRole;
       photoURL?: string;
       photoUserId: string;
@@ -164,19 +161,6 @@ export function promoteFromWaitlist(
   }
 
   return { joinedPlayerIds: joined, waitlistPlayerIds: waitlist };
-}
-
-export function resolveJoinedPlayers(match: MatchData): UserProfile[] {
-  return match.joinedPlayerIds.map((id) => {
-    const found = match.roster?.[id];
-    return {
-      id,
-      name: found?.name || t('matches.guestPlayer'),
-      email: '',
-      role: found?.role || ('Striker' as const),
-      photoURL: found?.photoURL || getAvatarUrl(id),
-    };
-  });
 }
 
 export function resolveRoster(match: MatchData): RosterEntry[] {

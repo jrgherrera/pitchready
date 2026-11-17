@@ -12,7 +12,6 @@ export const es: Messages = {
   nav: {
     dashboard: 'Inicio',
     matches: 'Partidos',
-    players: 'Jugadores',
     settings: 'Ajustes',
   },
   roles: {
@@ -118,7 +117,6 @@ export const es: Messages = {
   },
   dashboard: {
     liveMatches: 'Partidos en vivo',
-    totalPlayers: 'Jugadores totales',
     createNewMatch: 'Crear partido',
     upcomingMatches: 'Próximos partidos',
     viewAll: 'Ver todos',
@@ -229,12 +227,6 @@ export const es: Messages = {
     confirm: 'Confirmar ubicación',
     geoUnavailable: 'La geolocalización no está disponible en este navegador.',
     geoFailed: 'No se pudo obtener tu ubicación actual.',
-  },
-  players: {
-    title: 'Atletas PITCHREADY',
-    subtitle: 'Estado en tiempo real de los jugadores de la liga.',
-    activeProfiles: 'Perfiles activos:',
-    registered: '{{count}} REGISTRADOS',
   },
   settings: {
     upgradeTitle: 'Guarda tu cuenta',

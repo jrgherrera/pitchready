@@ -40,7 +40,7 @@ type Names = Record<string, Pick<UserProfile, 'id' | 'name' | 'role' | 'photoURL
 /**
  * Legacy string date -> Date, or null if unreadable. A date-only 'YYYY-MM-DD' becomes local midnight
  * (strictly, so 2026-02-31 is rejected rather than rolled over). Anything else gets what the app
- * itself accepts (useMatches does `new Date(s)`), e.g. an ISO string with a time.
+ * itself accepts (useMyMatches does `new Date(s)`), e.g. an ISO string with a time.
  */
 export function parseLegacyDate(s: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);

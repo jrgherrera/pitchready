@@ -14,7 +14,6 @@ const enCatalog = {
   nav: {
     dashboard: 'Dashboard',
     matches: 'Matches',
-    players: 'Players',
     settings: 'Settings',
   },
   roles: {
@@ -117,7 +116,6 @@ const enCatalog = {
   },
   dashboard: {
     liveMatches: 'Live Matches',
-    totalPlayers: 'Total Players',
     createNewMatch: 'Create New Match',
     upcomingMatches: 'Upcoming Matches',
     viewAll: 'View All',
@@ -228,12 +226,6 @@ const enCatalog = {
     confirm: 'Confirm Location',
     geoUnavailable: 'Geolocation is not available in this browser.',
     geoFailed: 'Could not get your current location.',
-  },
-  players: {
-    title: 'PITCHREADY Athletes',
-    subtitle: 'Real-time status of current soccer league players.',
-    activeProfiles: 'Active Profiles:',
-    registered: '{{count}} REGISTERED',
   },
   settings: {
     upgradeTitle: 'Save your account',
