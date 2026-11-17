@@ -33,4 +33,11 @@ assert.deepEqual(
   { name: 'Jorge', role: 'Keeper', photoURL: 'p.png' },
 );
 
+// Review Focus 2: a legacy match must not be invisible to its own creator.
+assert.deepEqual(
+  computeMemberIds({ creatorId: 'u1', joinedPlayerIds: [], waitlistPlayerIds: [] }),
+  ['u1'],
+  'the creator is always a member, so a backfilled match always matches their query',
+);
+
 console.log('matches.check: ok');
