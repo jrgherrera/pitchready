@@ -1,6 +1,6 @@
 /** Self-check for the guest name cache — run: npx tsx src/utils/guestName.check.ts */
 import assert from 'node:assert/strict';
-import { getStoredGuestName, storeGuestName } from './guestName';
+import { clearGuestName, getStoredGuestName, storeGuestName } from './guestName';
 
 const fakeStorage = (map: Map<string, string>) =>
   ({
@@ -50,6 +50,23 @@ const setStorage = (s: Storage | undefined) =>
   setStorage({ getItem: boom, setItem: boom } as unknown as Storage);
   assert.equal(getStoredGuestName(), '', 'throwing read reads as empty');
   assert.doesNotThrow(() => storeGuestName('Ana'), 'throwing write is swallowed');
+}
+
+// Clearing removes a stored name and is harmless when there is none or storage fails.
+{
+  const store = new Map<string, string>();
+  setStorage(fakeStorage(store));
+  storeGuestName('Ana');
+  clearGuestName();
+  assert.equal(getStoredGuestName(), '', 'stored name is gone after clearing');
+  assert.doesNotThrow(() => clearGuestName(), 'clearing with nothing stored does not throw');
+  setStorage(undefined);
+  assert.doesNotThrow(() => clearGuestName(), 'absent storage does not throw');
+  const boom = () => {
+    throw new Error('denied');
+  };
+  setStorage({ removeItem: boom } as unknown as Storage);
+  assert.doesNotThrow(() => clearGuestName(), 'throwing storage is swallowed');
 }
 
 console.log('guestName.check: ok');

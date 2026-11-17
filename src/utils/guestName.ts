@@ -21,3 +21,12 @@ export function storeGuestName(name: string): void {
     // Storage unavailable — the name is only a cache.
   }
 }
+
+/** Once an upgraded user's real name is saved on users/{uid}, the cache has done its job. */
+export function clearGuestName(): void {
+  try {
+    localStorage.removeItem(GUEST_NAME_KEY);
+  } catch {
+    // Storage unavailable — nothing to clear.
+  }
+}

@@ -32,7 +32,7 @@ import {
   upgradeWithGoogle,
   upgradeWithPassword,
 } from '../api/authActions';
-import { getStoredGuestName, storeGuestName } from '../../../utils/guestName';
+import { clearGuestName, getStoredGuestName, storeGuestName } from '../../../utils/guestName';
 import {
   buildDefaultProfile,
   needsOnboarding,
@@ -286,6 +286,8 @@ export function useAuth() {
       const next = await saveOnboardingProfile(user, name, role);
       setHasExistingUserDoc(true);
       setProfile(next);
+      // Guests return early above, so only an upgraded user reaches this.
+      clearGuestName();
     });
   };
 
