@@ -8,6 +8,7 @@ const match: MatchData = {
   capacity: 10, duration: 60, status: 'needs_players',
   joinedPlayerIds: ['u1', 'u2'], waitlistPlayerIds: ['u3'],
   guests: [{ id: 'g1', addedBy: 'u1', createdAt: 'x' }],
+  teams: [{ members: ['u1'] }],
   roster: { u1: { name: 'Jorge' } }, memberIds: ['u1', 'u2', 'u3'],
   creatorId: 'u1', creatorName: 'Jorge',
 };

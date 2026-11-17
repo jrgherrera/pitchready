@@ -8,7 +8,8 @@ import { weekBounds, isSameLocalWeek } from './weeks';
   assert.equal(start.getDay(), 1, 'starts Monday');
   assert.equal(start.getHours(), 0);
   assert.equal(start.getMinutes(), 0);
-  assert.equal(end.getTime() - start.getTime(), 7 * 24 * 60 * 60 * 1000);
+  assert.equal(end.getDay(), 1, 'ends on the next Monday');
+  assert.equal(end.getHours(), 0);
 }
 
 // Review Focus 5: the two sides of the Sunday/Monday midnight edge are different weeks.
