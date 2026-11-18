@@ -1,7 +1,9 @@
 import {
+  arrayUnion,
   collection,
   doc,
   getDocs,
+  increment,
   query,
   Timestamp,
   updateDoc,
@@ -191,6 +193,50 @@ export async function joinMatch(
       }
     }
     handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+  }
+}
+
+/**
+ * Joining from an invitation, by someone who cannot read the match. `joinMatch` rewrites whole
+ * roster arrays from a `MatchData` the caller holds; a link recipient holds none, and a guessed
+ * empty one would wipe the roster (the rules reject that, correctly). So this sends only what the
+ * joiner can know: `arrayUnion` of their own uid and `increment(1)` on the preview, both resolved
+ * against the stored documents, never against a stale client copy.
+ *
+ * The preview is only bumped for a roster join; a waitlister does not change `occupiedCount`.
+ * A roster join the rules refuse (the match filled meanwhile) retries once as a waitlist join.
+ * Nothing in the rules caps the waitlist, so the joiner cannot learn it is full from here.
+ */
+export async function joinMatchByLink(
+  matchId: string,
+  member: { id: string } & RosterMember,
+  target: 'roster' | 'waitlist',
+): Promise<void> {
+  const attempt = async (as: 'roster' | 'waitlist') => {
+    const { matchRef, previewRef } = refs(matchId);
+    const batch = writeBatch(db);
+    batch.update(matchRef, {
+      [as === 'roster' ? 'joinedPlayerIds' : 'waitlistPlayerIds']: arrayUnion(member.id),
+      memberIds: arrayUnion(member.id),
+      [`roster.${member.id}`]: rosterEntryFor(member),
+      updatedAt: new Date().toISOString(),
+    });
+    if (as === 'roster') batch.set(previewRef, { occupiedCount: increment(1) }, { merge: true });
+    await batch.commit();
+  };
+
+  try {
+    await attempt(target);
+  } catch (error) {
+    if (target === 'roster' && isRejection(error)) {
+      try {
+        await attempt('waitlist');
+        return;
+      } catch (retryError) {
+        handleFirestoreError(retryError, OperationType.UPDATE, `matches/${matchId}`);
+      }
+    }
+    handleFirestoreError(error, OperationType.UPDATE, `matches/${matchId}`);
   }
 }
 

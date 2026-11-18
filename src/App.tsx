@@ -10,6 +10,7 @@ import { VerifyEmailScreen } from './features/auth/components/VerifyEmailScreen'
 import { useAuth } from './features/auth/hooks/useAuth';
 import { CreateMatchModal } from './features/matches/components/CreateMatchModal';
 import { DashboardTab } from './features/matches/components/DashboardTab';
+import { MatchInviteScreen } from './features/matches/components/MatchInviteScreen';
 import { MatchDetailView } from './features/matches/components/MatchDetailView';
 import { MatchesTab } from './features/matches/components/MatchesTab';
 import { useMatchActions } from './features/matches/hooks/useMatchActions';
@@ -39,6 +40,7 @@ export default function App() {
     signUp,
     signIn,
     isGuest,
+    setGuestName,
     upgradeGuestWithGoogle,
     upgradeGuestWithPassword,
     requestMagicLink,
@@ -100,6 +102,29 @@ export default function App() {
     },
     () => setActiveMatchId(null),
   );
+
+  // A link to a match the visitor is not in: show the invitation instead of a login wall.
+  // Must precede every auth gate so a visitor with no session never meets one, and so the screen
+  // stays mounted while it creates the guest session mid-submit.
+  const activeMatch = matches.find((m) => m.id === activeMatchId);
+  if (
+    activeMatchId &&
+    !activeMatch &&
+    !authLoading &&
+    !showUpgrade &&
+    (!user || isGuest || gate === 'ready')
+  ) {
+    return (
+      <MatchInviteScreen
+        matchId={activeMatchId}
+        user={user}
+        profile={profile}
+        membershipKnown={!user || !matchesLoading}
+        onGuestName={setGuestName}
+        onExit={() => setActiveMatchId(null)}
+      />
+    );
+  }
 
   if (authLoading || gate === 'loading') {
     return <LoadingScreen />;
@@ -203,7 +228,6 @@ export default function App() {
     );
   }
 
-  const activeMatch = matches.find((m) => m.id === activeMatchId);
   const canManage = (match: MatchData) => canManageMatch(match, profile, superAdminMode);
 
   if (activeMatchId && activeMatch) {
