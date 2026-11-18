@@ -1,6 +1,8 @@
+import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useT } from './i18n';
 import { getStoredGuestName } from './utils/guestName';
-import { AppHeader, BottomNav } from './components/layout/AppShell';
+import { AppHeader } from './components/layout/AppShell';
 import { LoadingScreen } from './components/ui/LoadingScreen';
 import { ForgotPasswordForm } from './features/auth/components/ForgotPasswordForm';
 import { LoginScreen } from './features/auth/components/LoginScreen';
@@ -9,14 +11,13 @@ import { UpgradeAccountScreen } from './features/auth/components/UpgradeAccountS
 import { VerifyEmailScreen } from './features/auth/components/VerifyEmailScreen';
 import { useAuth } from './features/auth/hooks/useAuth';
 import { CreateMatchModal } from './features/matches/components/CreateMatchModal';
-import { DashboardTab } from './features/matches/components/DashboardTab';
 import { MatchInviteScreen } from './features/matches/components/MatchInviteScreen';
 import { MatchDetailView } from './features/matches/components/MatchDetailView';
-import { MatchesTab } from './features/matches/components/MatchesTab';
+import { MyMatchesScreen } from './features/matches/components/MyMatchesScreen';
 import { useMatchActions } from './features/matches/hooks/useMatchActions';
 import { useMyMatches } from './features/matches/hooks/useMyMatches';
 import { SettingsTab } from './features/settings/components/SettingsTab';
-import type { AppTab, MatchData } from './types';
+import type { MatchData } from './types';
 import {
   canManageMatch,
   getStoredSuperAdminMode,
@@ -27,6 +28,7 @@ import {
 type AuthView = 'login' | 'forgot-password';
 
 export default function App() {
+  const t = useT();
   const {
     user,
     profile,
@@ -57,7 +59,7 @@ export default function App() {
   const matches = [...upcoming, ...past];
 
   const [authView, setAuthView] = useState<AuthView>('login');
-  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
+  const [showSettings, setShowSettings] = useState(false);
   // Shared links land on /match/<id> (hosting rewrites it to index.html)
   const [activeMatchId, setActiveMatchId] = useState<string | null>(
     () => matchIdFromPath(window.location.pathname),
@@ -264,67 +266,63 @@ export default function App() {
     );
   }
 
-  const changeTab = (tab: AppTab) => {
-    setActiveTab(tab);
-    setActiveMatchId(null);
-  };
-
   return (
-    <div className="bg-[#020f0b] text-white min-h-screen pb-24 font-archivo">
-      <AppHeader profile={profile} onOpenSettings={() => changeTab('settings')} />
+    <div className="bg-[#020f0b] text-white min-h-screen pb-8 font-archivo">
+      <AppHeader profile={profile} onOpenSettings={() => setShowSettings(true)} />
 
       <main className="max-w-md mx-auto px-4 py-6">
-        {activeTab === 'dashboard' && (
-          <DashboardTab
-            matches={upcoming}
-            matchesLoading={matchesLoading}
+        {showSettings ? (
+          <>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="flex items-center gap-1 text-sm text-gray-400 hover:text-white mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" /> {t('settings.back')}
+            </button>
+            <SettingsTab
+              profile={profile}
+              superAdminMode={superAdminMode}
+              onProfileChange={setProfile}
+              onSuperAdminModeChange={(enabled) => {
+                storeSuperAdminMode(enabled);
+                setSuperAdminMode(enabled);
+              }}
+              onUpgrade={
+                isGuest
+                  ? () => {
+                      clearMessages();
+                      setShowUpgrade(true);
+                    }
+                  : undefined
+              }
+              onSave={(e) => {
+                e.preventDefault();
+                void updateUserProfile(profile);
+              }}
+              onLogout={() => {
+                void logout();
+                setActiveMatchId(null);
+                setShowSettings(false);
+                setAuthView('login');
+              }}
+            />
+          </>
+        ) : (
+          <MyMatchesScreen
+            upcoming={upcoming}
+            past={past}
+            loading={matchesLoading}
+            isGuest={isGuest}
             canManage={canManage}
             onOpenMatch={setActiveMatchId}
             onCreateMatch={() => setShowCreateModal(true)}
-            onViewAllMatches={() => changeTab('matches')}
-          />
-        )}
-
-        {activeTab === 'matches' && (
-          <MatchesTab
-            matches={matches}
-            matchesLoading={matchesLoading}
-            onOpenMatch={setActiveMatchId}
-            onCreateMatch={() => setShowCreateModal(true)}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <SettingsTab
-            profile={profile}
-            superAdminMode={superAdminMode}
-            onProfileChange={setProfile}
-            onSuperAdminModeChange={(enabled) => {
-              storeSuperAdminMode(enabled);
-              setSuperAdminMode(enabled);
-            }}
-            onUpgrade={
-              isGuest
-                ? () => {
-                    clearMessages();
-                    setShowUpgrade(true);
-                  }
-                : undefined
-            }
-            onSave={(e) => {
-              e.preventDefault();
-              void updateUserProfile(profile);
-            }}
-            onLogout={() => {
-              void logout();
-              setActiveMatchId(null);
-              setAuthView('login');
+            onCreateAccount={() => {
+              clearMessages();
+              setShowUpgrade(true);
             }}
           />
         )}
       </main>
-
-      <BottomNav activeTab={activeTab} onChangeTab={changeTab} />
 
       {showCreateModal && (
         <CreateMatchModal

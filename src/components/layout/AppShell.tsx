@@ -1,5 +1,5 @@
 import { useT } from '../../i18n';
-import type { AppTab, UserProfile } from '../../types';
+import type { UserProfile } from '../../types';
 import { getAvatarUrl } from '../../utils/avatars';
 
 interface AppHeaderProps {
@@ -31,46 +31,5 @@ export function AppHeader({ profile, onOpenSettings }: AppHeaderProps) {
         </div>
       </div>
     </header>
-  );
-}
-
-interface BottomNavProps {
-  activeTab: AppTab;
-  onChangeTab: (tab: AppTab) => void;
-}
-
-export function BottomNav({ activeTab, onChangeTab }: BottomNavProps) {
-  const t = useT();
-  const itemClass = (tab: AppTab) =>
-    `flex flex-col items-center gap-1 px-5 py-1.5 rounded-full transition-all ${
-      activeTab === tab
-        ? 'bg-[#d4f000] text-[#001710] font-bold'
-        : 'text-gray-400 hover:text-white'
-    }`;
-
-  return (
-    <nav className="fixed bottom-0 left-0 w-full bg-[#0a1c17] flex justify-around items-center py-3 z-50 border-t border-[#1f453a]">
-      <button onClick={() => onChangeTab('dashboard')} className={itemClass('dashboard')}>
-        <span
-          className="material-symbols-outlined text-xl select-none"
-          style={{
-            fontVariationSettings: activeTab === 'dashboard' ? "'FILL' 1" : "'FILL' 0",
-          }}
-        >
-          dashboard
-        </span>
-        <span className="font-inter font-bold text-[10px]">{t('nav.dashboard')}</span>
-      </button>
-
-      <button onClick={() => onChangeTab('matches')} className={itemClass('matches')}>
-        <span className="material-symbols-outlined text-xl select-none">sports_soccer</span>
-        <span className="font-inter font-bold text-[10px]">{t('nav.matches')}</span>
-      </button>
-
-      <button onClick={() => onChangeTab('settings')} className={itemClass('settings')}>
-        <span className="material-symbols-outlined text-xl select-none">settings</span>
-        <span className="font-inter font-bold text-[10px]">{t('nav.settings')}</span>
-      </button>
-    </nav>
   );
 }

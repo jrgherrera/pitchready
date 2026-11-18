@@ -11,11 +11,6 @@ const enCatalog = {
     signOut: 'Sign out',
     loading: 'PITCHREADY BOOTING...',
   },
-  nav: {
-    dashboard: 'Dashboard',
-    matches: 'Matches',
-    settings: 'Settings',
-  },
   roles: {
     Captain: 'Team Captain / All-rounder',
     Striker: 'Striker (Forward)',
@@ -114,20 +109,16 @@ const enCatalog = {
       magicLinkEmailRequired: 'Email is required to complete magic link sign-in.',
     },
   },
-  dashboard: {
-    liveMatches: 'Live Matches',
-    createNewMatch: 'Create New Match',
-    upcomingMatches: 'Upcoming Matches',
-    viewAll: 'View All',
-    emptyAdmin: 'No scheduled matches yet. Be the first to create one!',
-    hostMatch: 'Host Match',
+  home: {
+    createMatch: 'Create New Match',
+    upcoming: 'Upcoming Matches',
+    past: 'Past Matches',
+    emptyUpcoming: 'No upcoming matches. Create one and share its link, or open a link someone sent you.',
+    guestTitle: 'Want to organize matches?',
+    guestHint: 'Create an account to host your own matches and invite people with a link.',
+    guestCta: 'Create account',
   },
   matches: {
-    allScheduled: 'All Scheduled Matches',
-    newMatch: '+ New Match',
-    totalAvailable: 'Total Available: {{count}} Matches',
-    cloudSync: 'Real-time Cloud Sync Active',
-    emptyAdmin: 'No matches found. Create a match using the button above!',
     confirmed: 'Confirmed',
     needsPlayers: 'Needs Players',
     rosterStatus: 'Roster Status',
@@ -247,6 +238,7 @@ const enCatalog = {
     geoFailed: 'Could not get your current location.',
   },
   settings: {
+    back: 'Back',
     upgradeTitle: 'Save your account',
     upgradeHint: 'You joined as a guest. Create an account to keep your matches on any device.',
     upgradeButton: 'Create account',

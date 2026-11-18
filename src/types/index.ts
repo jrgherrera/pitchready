@@ -1,6 +1,5 @@
 export type PlayerRole = 'Captain' | 'Striker' | 'Midfield' | 'Keeper' | 'Defender';
 
-export type AppTab = 'dashboard' | 'matches' | 'settings';
 
 export type MatchStatus = 'needs_players' | 'confirmed' | 'cancelled';
 

@@ -9,11 +9,6 @@ export const es: Messages = {
     signOut: 'Cerrar sesión',
     loading: 'INICIANDO PITCHREADY...',
   },
-  nav: {
-    dashboard: 'Inicio',
-    matches: 'Partidos',
-    settings: 'Ajustes',
-  },
   roles: {
     Captain: 'Capitán / Todoterreno',
     Striker: 'Delantero',
@@ -115,20 +110,16 @@ export const es: Messages = {
       magicLinkEmailRequired: 'Se necesita el correo para completar el acceso con enlace mágico.',
     },
   },
-  dashboard: {
-    liveMatches: 'Partidos en vivo',
-    createNewMatch: 'Crear partido',
-    upcomingMatches: 'Próximos partidos',
-    viewAll: 'Ver todos',
-    emptyAdmin: 'Aún no hay partidos. ¡Sé el primero en crear uno!',
-    hostMatch: 'Organizar partido',
+  home: {
+    createMatch: 'Crear partido',
+    upcoming: 'Próximos partidos',
+    past: 'Partidos pasados',
+    emptyUpcoming: 'No tienes partidos próximos. Crea uno y comparte su enlace, o abre un enlace que te hayan enviado.',
+    guestTitle: '¿Quieres organizar partidos?',
+    guestHint: 'Crea una cuenta para organizar tus propios partidos e invitar con un enlace.',
+    guestCta: 'Crear cuenta',
   },
   matches: {
-    allScheduled: 'Todos los partidos',
-    newMatch: '+ Nuevo partido',
-    totalAvailable: 'Disponibles: {{count}} partidos',
-    cloudSync: 'Sincronización en la nube activa',
-    emptyAdmin: 'No hay partidos. ¡Crea uno con el botón de arriba!',
     confirmed: 'Confirmado',
     needsPlayers: 'Faltan jugadores',
     rosterStatus: 'Estado de la plantilla',
@@ -248,6 +239,7 @@ export const es: Messages = {
     geoFailed: 'No se pudo obtener tu ubicación actual.',
   },
   settings: {
+    back: 'Volver',
     upgradeTitle: 'Guarda tu cuenta',
     upgradeHint: 'Entraste como invitado. Crea una cuenta para conservar tus partidos en cualquier dispositivo.',
     upgradeButton: 'Crear cuenta',
