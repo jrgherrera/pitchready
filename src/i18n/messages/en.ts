@@ -258,6 +258,7 @@ const enCatalog = {
     superAdminMode: 'Super admin mode',
     superAdminModeHint: 'Off shows matches as a regular player would see them.',
     logOut: 'Log Out Account',
+    guestLogOutConfirm: 'Logging out ends this guest account for good. The matches you joined will become unreachable and there is no way to get back in. Log out anyway?',
   },
 } as const;
 

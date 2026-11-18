@@ -135,9 +135,6 @@ export function SettingsTab({
         </label>
       )}
 
-      {/* Not for guests: an anonymous session cannot be signed back into, so "log out" would strand
-          every match they joined. They get the upgrade card above instead. */}
-      {!onUpgrade && (
       <div className="space-y-3">
         <button
           onClick={onLogout}
@@ -146,7 +143,6 @@ export function SettingsTab({
           <LogOut className="w-4 h-4" /> {t('settings.logOut')}
         </button>
       </div>
-      )}
     </section>
   );
 }

@@ -303,6 +303,8 @@ export default function App() {
                 else void updateUserProfile(profile);
               }}
               onLogout={() => {
+                // An anonymous session cannot be signed back into: say so before ending it.
+                if (isGuest && !window.confirm(t('settings.guestLogOutConfirm'))) return;
                 void logout();
                 setActiveMatchId(null);
                 setShowSettings(false);

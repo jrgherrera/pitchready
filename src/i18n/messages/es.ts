@@ -259,5 +259,6 @@ export const es: Messages = {
     superAdminMode: 'Modo súper admin',
     superAdminModeHint: 'Desactivado muestra los partidos como los ve un jugador normal.',
     logOut: 'Cerrar sesión',
+    guestLogOutConfirm: 'Cerrar sesión termina esta cuenta de invitado para siempre. Los partidos a los que te uniste quedarán inaccesibles y no hay forma de volver a entrar. ¿Cerrar sesión de todos modos?',
   },
 };
