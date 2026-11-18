@@ -8,8 +8,12 @@ interface MyMatchesScreenProps {
   upcoming: MatchData[];
   past: MatchData[];
   loading: boolean;
-  /** A listener failed for good (missing index, rules): say so rather than show an empty list. */
-  failed: boolean;
+  /**
+   * Which listener failed for good (missing index, rules): say so rather than show an empty list.
+   * Per query, not one flag for both -- the two use different composite indexes, so one can fail
+   * while the other works, and a shared flag made a past-query failure hide loaded upcoming matches.
+   */
+  failed: { upcoming: boolean; past: boolean };
   /** Guests cannot create matches: the rules need a registered account. */
   isGuest: boolean;
   canManage: (match: MatchData) => boolean;
@@ -63,7 +67,7 @@ export function MyMatchesScreen({
           <div className="py-12 flex justify-center text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin" />
           </div>
-        ) : failed ? (
+        ) : failed.upcoming ? (
           <div role="alert" className="bg-[#0a1c17] border border-red-900/40 rounded-xl p-8 text-center text-sm text-red-300">
             {t('home.loadFailed')}
           </div>
@@ -86,16 +90,22 @@ export function MyMatchesScreen({
       </div>
 
       {/* Past is recessed by muting colours, not opacity, so text keeps its contrast */}
-      {!loading && past.length > 0 && (
+      {!loading && (past.length > 0 || failed.past) && (
         <div className="[&_h3]:text-gray-300 [&_.text-\[\#d4f000\]]:text-gray-400 [&_button]:bg-[#0f2d24] [&_button]:text-[#d4f000] [&_button]:border [&_button]:border-[#1f453a]">
           <h2 className="font-anton text-sm uppercase tracking-wider text-gray-400 mb-3">
             {t('home.past')}
           </h2>
-          <div className="space-y-3">
-            {past.map((match) => (
-              <MatchListCard key={match.id} match={match} onOpen={onOpenMatch} />
-            ))}
-          </div>
+          {failed.past ? (
+            <div role="alert" className="bg-[#0a1c17] border border-red-900/40 rounded-xl p-6 text-center text-sm text-red-300">
+              {t('home.loadFailed')}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {past.map((match) => (
+                <MatchListCard key={match.id} match={match} onOpen={onOpenMatch} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>

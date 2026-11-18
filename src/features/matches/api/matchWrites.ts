@@ -205,11 +205,30 @@ export async function joinMatch(
     try {
       const snap = await getDoc(refs(match.id).matchRef);
       if (!snap.exists()) throw error;
+      // True for the roster fields this path reads -- the id arrays, `guests`, `capacity` -- and
+      // nothing else. `date` arrives as a raw Timestamp, not the Date the type promises, because
+      // `toMatch`'s normalization is not in the way here. Never hand `fresh` to anything that
+      // formats a date.
       fresh = { ...match, ...(snap.data() as Partial<MatchData>) };
-    } catch {
+    } catch (readError) {
+      // Surface the original rejection: that is the one the user hit. But log why the re-read
+      // failed too, or the console says 'permission-denied' when the real cause was something else
+      // entirely (offline, for one), and the next person to debug this starts from a false lead.
+      console.error('join re-read failed', readError);
       handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
     }
     const as = target === 'roster' && isMatchFull(fresh) ? 'waitlist' : target;
+    // Already on the list we were about to write: the first attempt landed after all, or a leave
+    // promoted us while this was in flight. Re-sending is pointless at best -- and for a waitlist
+    // retry it is worse, because `buildJoinPatch` only clears the OTHER array when the target is
+    // 'roster'. A waitlist retry over a roster membership appends the uid WITHOUT removing it,
+    // leaving them on both lists, and the rules accept that: `memberIds` is unchanged as a set, so
+    // the symmetric difference is empty, the derived-count check holds, and `occupied` never moved.
+    // Measured against the emulator, not reasoned about. Without these two lines the retry turns
+    // the very race it exists for into a corrupt roster: the player renders twice and holds a
+    // waitlist slot a real waitlister cannot have.
+    if (fresh.joinedPlayerIds.includes(member.id)) return 'joined';
+    if (as === 'waitlist' && (fresh.waitlistPlayerIds ?? []).includes(member.id)) return 'joined';
     if (as === 'waitlist' && isWaitlistFull(fresh)) return 'waitlist-full';
     try {
       await attempt(fresh, as);

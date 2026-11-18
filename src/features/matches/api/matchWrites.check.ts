@@ -103,6 +103,23 @@ const fullMatchWithWaitlist: MatchData = {
   );
 }
 
+// Why `joinMatch` guards its retry: a waitlist patch does NOT remove the uid from the roster, so
+// building one for someone already on the roster puts them on both lists. The rules cannot catch
+// it -- `memberIds` is unchanged as a set, so the symmetric-difference check sees nothing. This
+// pins the trap, not a bug: the guard in `joinMatch` is what makes it unreachable, and `joinMatch`
+// itself cannot be loaded here (it imports `src/lib/firebase`). Delete that guard and this still
+// passes -- so if you are here because you removed it, put it back.
+{
+  const onBoth = buildJoinPatch(fullMatchWithWaitlist, { id: 'u1', name: 'Uno' }, 'waitlist');
+  assert.ok(onBoth.matchPatch.waitlistPlayerIds.includes('u1'), 'appended to the waitlist');
+  assert.ok(onBoth.matchPatch.joinedPlayerIds.includes('u1'), 'and still on the roster');
+  assert.deepEqual(
+    [...onBoth.matchPatch.memberIds].sort(),
+    ['u1', 'u2', 'w1'],
+    'memberIds is unchanged as a set, which is exactly why the rules allow this write',
+  );
+}
+
 // Removing a guest frees a spot, so the waitlist is reconciled in the same patch.
 {
   const { matchPatch, previewPatch } = buildGuestListPatch(fullMatchWithWaitlist, []);

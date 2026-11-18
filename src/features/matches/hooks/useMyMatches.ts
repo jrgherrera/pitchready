@@ -22,6 +22,13 @@ function toMatch(docSnap: { id: string; data: () => Record<string, unknown> }): 
     id: docSnap.id,
     // Timestamp since the switch; legacy docs still hold a 'YYYY-MM-DD' string
     date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as string),
+    // The rules read a missing capacity as 10 (createMatch's fallback) and the backfill writes
+    // none, so a backfilled legacy doc really can carry `memberIds` with no `capacity` -- the
+    // type says `number` and the document disagrees. Default it here, where a document becomes a
+    // MatchData and `date` is already being normalized, rather than in each consumer: undefined
+    // makes `isMatchFull` always false, and `getCapacityPercent` and `getSpotsLeft` return NaN,
+    // which renders. `joinMatch`'s `fresh` inherits this, since an absent field cannot overwrite.
+    capacity: (data.capacity as number | undefined) ?? 10,
   } as MatchData;
 }
 
@@ -85,14 +92,14 @@ export function useMyMatches(user: User | null) {
   const [upcoming, setUpcoming] = useState<MatchData[]>([]);
   const [past, setPast] = useState<MatchData[]>([]);
   const [loaded, setLoaded] = useState({ upcoming: false, past: false });
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState({ upcoming: false, past: false });
 
   useEffect(() => {
     // A different user (or none) must never see the last one's matches, rosters included.
     setUpcoming([]);
     setPast([]);
     setLoaded({ upcoming: false, past: false });
-    setFailed(false);
+    setFailed({ upcoming: false, past: false });
     if (!user) return;
 
     const now = Timestamp.now();
@@ -105,7 +112,7 @@ export function useMyMatches(user: User | null) {
         setLoaded((l) => ({ ...l, upcoming: true }));
       },
       () => {
-        setFailed(true);
+        setFailed((f) => ({ ...f, upcoming: true }));
         setLoaded((l) => ({ ...l, upcoming: true }));
       },
     );
@@ -116,7 +123,7 @@ export function useMyMatches(user: User | null) {
         setLoaded((l) => ({ ...l, past: true }));
       },
       () => {
-        setFailed(true);
+        setFailed((f) => ({ ...f, past: true }));
         setLoaded((l) => ({ ...l, past: true }));
       },
     );
