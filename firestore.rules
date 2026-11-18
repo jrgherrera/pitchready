@@ -71,7 +71,9 @@ service cloud.firestore {
           || occupied(request.resource.data) <= resource.data.get('capacity', 10);
       }
 
-      // Super admin first: legacy docs may lack creatorId, and a missing-key read denies
+      // Operand order costs nothing either way: .get('creatorId', '') already reads a legacy doc
+      // with no creatorId as '' rather than erroring, and an erroring operand would lose to a true
+      // one regardless (measured — see the note on `allow get` below).
       function isMatchOwner() {
         return isSignedIn()
           && (isSuperAdmin() || resource.data.get('creatorId', '') == request.auth.uid);

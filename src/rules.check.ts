@@ -205,10 +205,10 @@ await assertSucceeds(updateDoc(doc(anonDb, 'matches/joinme'), {
   joinedPlayerIds: ['host', 'stranger', 'anon'], memberIds: ['host', 'stranger', 'anon'],
   'roster.anon': { name: 'A' }, updatedAt: 'x',
 }));
-// And having joined, an anonymous attendee reads the match: the guest path this feature exists for,
-// and the only actor whose token makes isSuperAdmin() error outright. Pinned for the behaviour
-// itself, not because operand order saves it — an erroring operand loses to a true one either way
-// (measured; see the note on `allow get` in firestore.rules).
+// And having joined, an anonymous attendee reads the match: the guest path this feature exists for.
+// What is unique to this actor is the anonymous provider, not an email-less token — every mock
+// token here lacks the email claim, so isSuperAdmin() errors for all of them, harmlessly: an
+// erroring operand loses to a true one (measured; see the note on `allow get` in firestore.rules).
 await assertSucceeds(getDoc(doc(anonDb, 'matches/joinme')));
 await assertSucceeds(getDocs(query(collection(anonDb, 'matches'), where('memberIds', 'array-contains', 'anon'))));
 

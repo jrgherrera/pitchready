@@ -73,6 +73,11 @@ export function useAuth() {
     } catch {
       /* keep going: switching over matters more than the refresh */
     }
+    // Teardown nulls the ref (and replaces it on a remount), so this is the cancelled check for the
+    // await above: calling a stale applyUser would attach a users/{uid} listener whose unsubProfile
+    // closure belongs to an effect already cleaned up, leaking it for good. Exit instead — a
+    // remounted effect applies the user through its own onAuthStateChanged.
+    if (applyUserRef.current !== apply) return;
     setProfile(null);
     setUser(current);
     apply(current);
