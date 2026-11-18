@@ -13,7 +13,7 @@ Están en el orden en que se tomaron, agrupadas por tarea.
 
 ---
 
-## Lo primero que deberías leer: seis premisas mías resultaron falsas
+## Lo primero que deberías leer: siete premisas mías resultaron falsas
 
 De todas las decisiones de abajo, estas son las que más importan, porque
 afirmé cada una con seguridad y cada una fue refutada midiéndola. Las cuatro
@@ -48,12 +48,30 @@ primeras son sobre el mismo mecanismo.
 6. **Que un doble envío es inofensivo** porque las reglas lo rechazan. La mitad
    correcta: el rechazo ocurre. La mitad que importaba: ese rechazo dispara un
    reintento que **sí** pasa, dejando al usuario en las dos listas a la vez.
+7. **Que mis dos restricciones acopladas cubrían la integridad del roster.**
+   Son restricciones **de conjunto**: la derivada comprueba que `memberIds` sea
+   la unión de creador + roster + lista de espera, y la de diferencia simétrica
+   comprueba cuánto cambió esa unión. Las dos son **ciegas, por construcción**, a
+   cualquier escritura que mueva un uid *entre* las listas que alimentan la
+   unión, porque la unión no cambia. Llevaba toda la rama tratándolas como si
+   cubrieran el roster; cubren la pertenencia, que es estrictamente menos. El
+   reintento de la última ola pasaba las tres restricciones dejando a un jugador
+   en el roster **y** en la lista de espera a la vez. Lo encontró la
+   re-revisión, con un sondeo contra el emulador.
 
-El patrón, que vale más que las seis: **todas eran afirmaciones sobre
+El patrón, que vale más que las siete: **todas eran afirmaciones sobre
 mecanismos que no probé, con un emulador disponible.** Las que llegaron al
 código fueron las que afirmé con más firmeza. La única que se atrapó antes de
 llegar a ninguna parte fue la sexta, y solo porque la mandé a verificar por
 sospechar de ella — halagaba una decisión anterior mía.
+
+La séptima es la más instructiva de todas, porque no era un hecho que no
+verifiqué sino **un razonamiento que nunca hice**: supuse el alcance de mis
+propias reglas en lugar de derivarlo. Y la misma forma de error — el doble
+envío — mordió **tres veces** en esta rama por tres puertas distintas. Si
+alguna vez una escritura futura reordena `joinedPlayerIds` contra
+`waitlistPlayerIds`, las reglas no la van a parar: hay que guardarla en el
+cliente, o escribir una regla que compare las listas y no su unión.
 
 ---
 
@@ -210,6 +228,23 @@ sospechar de ella — halagaba una decisión anterior mía.
 - **Un reintento no se dispara si quien entra ya es miembro.** La regla de
   lectura sirve como oráculo de pertenencia gratis; sin eso, un doble envío
   dejaba el mismo uid en las dos listas.
+- **El retroceso del reintento se guarda en el cliente, no en las reglas.** Un
+  reintento como lista de espera sobre alguien que ya está en el roster deja al
+  uid en las dos listas, y **ninguna regla puede verlo** (premisa 7). Se cortó
+  con dos guardias en `joinMatch`. *Si está mal:* vuelve el roster corrupto del
+  párrafo anterior; el check que lo acompaña fija el comportamiento de
+  `buildJoinPatch` que las guardias compensan, y dice por escrito que seguirá
+  pasando si alguien borra las guardias.
+- **Una `capacity` ausente vale 10, y se resuelve en `toMatch`.** Las reglas ya
+  la leían como 10, pero el backfill no la escribe, así que un documento
+  reconstruido lleva `memberIds` sin `capacity`. Sin el valor por defecto
+  `isMatchFull` siempre da falso y `getCapacityPercent` y `getSpotsLeft`
+  devuelven **NaN**, que se renderiza. Va en el embudo donde el documento se
+  vuelve `MatchData`, no en cada consumidor. *Si está mal:* una línea.
+- **El fallo de los dos listeners se marca por consulta, no con una bandera
+  compartida.** Usan índices compuestos distintos, así que uno puede fallar solo,
+  y una bandera única escondía los partidos ya cargados detrás de un error de la
+  otra consulta. *Si está mal:* se vuelve a una bandera.
 - **La sección de pasados se atenúa con color, no con `opacity`.** Un
   `opacity-60` sobre todo el bloque caía bajo el contraste mínimo de WCAG. El
   texto más apagado quedó en ≈7.7:1, sobre AA y sobre AAA.
@@ -224,6 +259,11 @@ emulador. Lo que queda sin cobertura automática, por imposibilidad y no por
 descuido:
 
 - Todas las pantallas, hooks y listeners de Firestore.
+- **Las llaves de los placeholders de i18n**, y solo esas. Aquí me corrigió la
+  re-revisión: `es.ts` está tipado contra el catálogo inglés, así que `tsc` **sí**
+  detecta una clave que falte — lo demostró borrando una y corriendo el lint. Lo
+  que nada atrapa es una llave simple: `{count}` compila perfecto y se renderiza
+  literal. El agujero es más estrecho de lo que yo había registrado, pero existe.
 - Los caminos de linkeo de cuenta, el refresco de token y el estado atascado.
 - Si el token de una subida de cuenta conserva `sign_in_provider: 'anonymous'`.
   El emulador usa tokens falsos; solo se observa en producción.
