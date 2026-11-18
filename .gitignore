@@ -18,6 +18,7 @@ server.js
 sa-key.json
 *-key.json
 *serviceaccount*.json
+*firebase-adminsdk*.json
 
 # Editor / OS
 .DS_Store

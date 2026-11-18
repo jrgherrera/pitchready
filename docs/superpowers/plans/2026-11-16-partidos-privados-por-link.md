@@ -345,6 +345,81 @@ git commit -m "Write every match mutation and its preview in one batch"
 
 ---
 
+### Task 3b: Widen the rules for writes
+
+**Added during execution, correcting a defect in this plan.** Task 3's text claimed its changes "ship behind the old permissive rules and nothing breaks." That was wrong. The old rules are permissive for *reads*, not writes:
+
+- `matchPreviews` has no rule block at all, and Firestore denies what no `allow` grants — so every preview write fails.
+- `onlyRosterChanged()` whitelists only `joinedPlayerIds`, `waitlistPlayerIds`, `guests` and `updatedAt`, so a non-owner write carrying `memberIds` and `roster.<uid>` fails.
+- `matchWrites.ts` batches both documents, and a batch is atomic, so one denied write fails the whole mutation.
+
+Against the deployed rules, Task 3 alone breaks create, edit, join, leave, +1 and delete. The write permissions must land **before** the client that needs them, and before Task 4's backfill, which writes previews too. This is the expand half of an expand-then-contract migration; Task 6 is the contract half.
+
+**Files:**
+- Modify: `firestore.rules`
+- Modify: `src/rules.check.ts`
+
+- [ ] **Step 1: Write the failing assertions**
+
+Insert them in `src/rules.check.ts` **before the host-delete assertion** — a NOTE there records that `m1` does not exist past that line.
+
+```ts
+// Preview writes: the owner manages it, any signed-in user may move the counters.
+assertSucceeds(setDoc(doc(hostDb, 'matchPreviews/m1'), validPreviewPayload()));
+assertSucceeds(updateDoc(doc(playerDb, 'matchPreviews/m1'), { occupiedCount: 5, updatedAt: 'x' }));
+assertFails(updateDoc(doc(playerDb, 'matchPreviews/m1'), { title: 'hijacked' }));
+assertFails(getDocs(collection(unauthedDb, 'matchPreviews')));
+
+// A join may now carry memberIds and its own roster key, which the old whitelist refused.
+assertSucceeds(updateDoc(doc(playerDb, 'matches/m1'), {
+  joinedPlayerIds: ['host', 'player'], memberIds: ['host', 'player'],
+  'roster.player': { name: 'P' }, updatedAt: 'x',
+}));
+assertFails(updateDoc(doc(playerDb, 'matches/m1'), { 'roster.host': { name: 'hijacked' }, updatedAt: 'x' }));
+assertFails(updateDoc(doc(playerDb, 'matches/m1'), { roster: {}, updatedAt: 'x' }));
+
+// Capacity cannot be exceeded, but an over-capacity match can still be left.
+assertFails(updateDoc(doc(playerDb, 'matches/full'), { joinedPlayerIds: [...tenIds, 'player'], updatedAt: 'x' }));
+assertSucceeds(updateDoc(doc(overDb, 'matches/over'), { joinedPlayerIds: nineOfEleven, updatedAt: 'x' }));
+```
+
+Seed `matches/full` (ten joined, capacity ten) and `matches/over` (eleven joined, capacity ten, `overDb` a member of it). `validPreviewPayload()` is a local helper.
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `npm run check:rules`
+Expected: FAIL — no rule grants any preview write, and the roster whitelist rejects `memberIds`.
+
+- [ ] **Step 3: Widen the rules**
+
+In `firestore.rules`, **writes only** — leave every read rule exactly as it is, because Task 5 still needs the permissive reads and Task 6 closes them:
+
+- `onlyRosterChanged()` gains `roster` and `memberIds` in its `hasOnly`, and constrains the roster diff to the caller's own key: `request.resource.data.roster.diff(resource.data.roster).affectedKeys().hasOnly([request.auth.uid])`.
+- Capacity: allow any change that does not increase `joinedPlayerIds.size() + guests.size()`; require the cap only when it increases. A legacy or host-shrunk match may already exceed it, and a hard `<=` would trap its players.
+- Add `matchPreviews/{matchId}`: `get: if true`, `list: if false`, `create` and `delete` for the match owner, `update` for the owner or any signed-in user changing only `occupiedCount`, `status` and `updatedAt`. The preview holds nothing private by construction, so opening its read now exposes nothing Task 6 would need to take back.
+
+- [ ] **Step 4: Run it to verify it passes**
+
+Run: `npm run check:rules`
+Expected: `rules.check: ok`, with Task 2's three characterization assertions still passing — this task changes no read rule.
+
+- [ ] **Step 5: Deploy, after asking**
+
+This writes to the live project and is the first step in this plan with an effect outside the repo. Ask before running it.
+
+Run: `firebase deploy --only firestore:rules --project pitchready-soccer`
+
+Then verify in the running app that create, edit, join, leave, +1 and delete all work again, and that `matchPreviews` documents appear alongside their matches.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add firestore.rules src/rules.check.ts
+git commit -m "Allow preview writes and the widened roster fields"
+```
+
+---
+
 ### Task 4: Backfill the matches that already exist
 
 New documents are correct from Task 3 on. The ones already in Firestore have no `memberIds`, no `roster`, no `creatorName` and no preview — and Task 6 makes `memberIds` the only way anything is visible, so an un-backfilled match vanishes for its own creator.
@@ -360,6 +435,8 @@ New documents are correct from Task 3 on. The ones already in Firestore have no 
 - [ ] **Step 1: Write the script**
 
 Using the client SDK and the super admin's credentials — the rules already grant them every match, and this avoids a service-account key. For each document in `matches`: fill `memberIds` via `computeMemberIds`, fill `creatorName` from `users/{creatorId}`, fill `roster` from the `users` documents of `joinedPlayerIds` and `waitlistPlayerIds`, and create `matchPreviews/{id}` via `toPreview`. Skip a document that already has `memberIds` so a second run is a no-op. Print one line per match and a total.
+
+**Also normalize `date` to a Timestamp.** `useMatches.ts:24` records that legacy documents still hold a `'YYYY-MM-DD'` string, and Firestore orders values by type before value — so a string `date` falls outside every `Timestamp` range query. Such a match is invisible to Task 5's `date >= now` *and* `date < now` queries, meaning it appears in neither the upcoming list nor the past one, and it is never counted by Task 10's weekly cap. That is Review Focus 2's failure mode arriving by a second route, and this backfill is the one pass that already visits every match. Convert any string `date` to a Timestamp at local midnight of that day, and report how many were converted.
 
 - [ ] **Step 2: Decide and record what happens to the old ids**
 
@@ -457,9 +534,11 @@ git commit -m "Query matches by membership and drop the global player directory"
 
 ---
 
-### Task 6: Close the rules
+### Task 6: Close the reads
 
-The breaking change, landing last among the data changes and verified by the harness from Task 2. Flip its three leak assertions and prove the roster write is scoped.
+The breaking change, landing last among the data changes and verified by the harness from Task 2. Flip its three leak assertions.
+
+**Scope narrowed during execution.** Task 3b already widened the write rules — the roster whitelist, the capacity check and the whole `matchPreviews` block are done and deployed. This task is the contract half: it closes reads, and that is all. By now the client already queries by membership (Task 5) and every match carries `memberIds` (Task 4), so closing reads breaks nothing.
 
 **Files:**
 - Modify: `firestore.rules`
@@ -523,12 +602,10 @@ In `firestore.rules`:
 - Add `isRegistered()`: signed in and `request.auth.token.firebase.sign_in_provider != 'anonymous'`.
 - Audit every existing use of `isSignedIn()`. It now includes anonymous users, which it did not before; each site decides explicitly.
 - `matches/{matchId}`: `get` and `list` require `request.auth.uid in resource.data.memberIds` or `isSuperAdmin()`. `create` requires `isRegistered()`, `email_verified`, `creatorId == request.auth.uid`, `isValidId(matchId)`. `delete` unchanged.
-- `onlyRosterChanged()` gains `roster` and `memberIds` in `hasOnly`, and constrains the roster diff to `[request.auth.uid]`.
-- Capacity: allow any change that does not increase `joinedPlayerIds.size() + guests.size()`; require the cap only when it increases.
-- `matchPreviews/{matchId}`: `get: if true`, `list: if false`, `create`/`delete` for the match owner, `update` for the owner or any signed-in user changing only `occupiedCount`, `status`, `updatedAt`.
 - `users/{userId}`: `get` only own document, `list: if false`, `create`/`update` as today plus `isRegistered()`.
+- Leave `onlyRosterChanged()`, the capacity check and the `matchPreviews` block alone — Task 3b owns all three and they are already deployed.
 - Remove `isAdmin()`.
-- No super-admin branch on `list` — no query exercises it (spec).
+- **`list` keeps a super-admin branch: `|| isSuperAdmin()`.** This reverses an earlier ruling in this plan, which dropped it on the grounds that no query exercised it. That premise is now false: Task 4's backfill runs an unfiltered `getDocs(collection(db, 'matches'))` as the super admin, so without this branch the backfill stops working the moment these rules deploy — and worse, it would see zero matches rather than an error, making a no-op look like success. A migration tool that only works before one unrelated task lands is a trap. The cost is that the owner can enumerate their own matches, which they can already do from the Firebase console.
 
 - [ ] **Step 4: Run it to verify it passes**
 
