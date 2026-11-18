@@ -63,11 +63,19 @@ export function useAuth() {
     // flight, which the null check above would no longer cover.
     const apply = applyUserRef.current;
     if (!current || !apply) return;
-    // Linking keeps the uid AND the existing ID token, which can still carry
-    // firebase.sign_in_provider: 'anonymous'. The rules gate users writes and match creation on
-    // that claim (isRegistered), so without a forced refresh the upgraded guest's onboarding
-    // write — the first thing this flow does — is denied. A failed refresh must not block the
-    // switch-over: a denied write surfaces as itself, an app stuck on the guest profile does not.
+    // Linking keeps the uid. The rules gate users writes and match creation on
+    // firebase.sign_in_provider (isRegistered), and the upgraded guest's onboarding write is the
+    // first thing this flow does, so the claim has to say 'password' by then.
+    //
+    // MEASURED against the live project, because an earlier revision of this comment asserted the
+    // opposite as fact: the link call ITSELF returns a token already carrying 'password', with the
+    // uid unchanged and email_verified false. So this refresh is very probably redundant.
+    // Kept anyway, and deliberately: the measurement covers the REST endpoint the SDK uses, not
+    // whether the SDK installs that token where a later getIdToken() will find it, and the Google
+    // link path was not measured at all. One round trip on a rare path is a cheap hedge against a
+    // denial that would strand the user mid-upgrade. A failed refresh must not block the
+    // switch-over either: a denied write surfaces as itself, an app stuck on the guest profile does
+    // not. Do not "simplify" this away on the strength of the comment above it.
     try {
       await current.getIdToken(true);
     } catch {

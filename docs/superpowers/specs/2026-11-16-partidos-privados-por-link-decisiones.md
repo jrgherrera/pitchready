@@ -13,7 +13,7 @@ Están en el orden en que se tomaron, agrupadas por tarea.
 
 ---
 
-## Lo primero que deberías leer: siete premisas mías resultaron falsas
+## Lo primero que deberías leer: ocho premisas mías resultaron falsas
 
 De todas las decisiones de abajo, estas son las que más importan, porque
 afirmé cada una con seguridad y cada una fue refutada midiéndola. Las cuatro
@@ -59,7 +59,18 @@ primeras son sobre el mismo mecanismo.
    en el roster **y** en la lista de espera a la vez. Lo encontró la
    re-revisión, con un sondeo contra el emulador.
 
-El patrón, que vale más que las siete: **todas eran afirmaciones sobre
+8. **Que el token conserva `sign_in_provider: 'anonymous'` después de linkear.**
+   De ahí salió el `getIdToken(true)` forzado de `reapplyAfterLink`, y la
+   afirmación llegó a escribirse como comentario en `useAuth.ts`. Medido contra
+   el proyecto real: la llamada de link **ya devuelve** un token que dice
+   `password`, con el mismo uid y `email_verified: false`. El refresco
+   probablemente no hace nada. **Lo dejé igual**, y a propósito: lo que medí es
+   el endpoint REST que usa el SDK, no si el SDK instala ese token donde un
+   `getIdToken()` posterior lo encuentre, y el camino de Google no lo medí. Una
+   ida y vuelta en un camino raro es un seguro barato. Lo que sí corregí es la
+   afirmación.
+
+El patrón, que vale más que las ocho: **todas eran afirmaciones sobre
 mecanismos que no probé, con un emulador disponible.** Las que llegaron al
 código fueron las que afirmé con más firmeza. La única que se atrapó antes de
 llegar a ninguna parte fue la sexta, y solo porque la mandé a verificar por
@@ -259,14 +270,17 @@ emulador. Lo que queda sin cobertura automática, por imposibilidad y no por
 descuido:
 
 - Todas las pantallas, hooks y listeners de Firestore.
+- **El camino de Google al subir de cuenta.** Lo de contraseña sí quedó medido
+  (premisa 8); Google no, porque pide un OAuth real.
 - **Las llaves de los placeholders de i18n**, y solo esas. Aquí me corrigió la
   re-revisión: `es.ts` está tipado contra el catálogo inglés, así que `tsc` **sí**
   detecta una clave que falte — lo demostró borrando una y corriendo el lint. Lo
   que nada atrapa es una llave simple: `{count}` compila perfecto y se renderiza
   literal. El agujero es más estrecho de lo que yo había registrado, pero existe.
 - Los caminos de linkeo de cuenta, el refresco de token y el estado atascado.
-- Si el token de una subida de cuenta conserva `sign_in_provider: 'anonymous'`.
-  El emulador usa tokens falsos; solo se observa en producción.
+- ~~Si el token de una subida de cuenta conserva `sign_in_provider: 'anonymous'`.~~
+  **Ya no: se midió** contra el proyecto real el 18 de noviembre, y la respuesta
+  fue que no lo conserva. Es la premisa 8.
 
 La lista de comprobaciones manuales que quedan pendientes vive en el reporte de
 cada tarea, y la más importante es: **subir un invitado a cuenta real por Google
