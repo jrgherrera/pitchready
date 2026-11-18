@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, MatchGuest, RosterMember, UserProfile } from '../../../types';
-import { isWaitlistFull, rosterEntryFor } from '../../../utils/matches';
+import { isMatchFull, isWaitlistFull, rosterEntryFor } from '../../../utils/matches';
 import { weekBounds } from '../../../utils/weeks';
 import { countCreatedActive } from './weeklyLimit';
 import {
@@ -188,27 +188,35 @@ export async function joinMatch(
   member: { id: string } & RosterMember,
   target: 'roster' | 'waitlist',
 ): Promise<'joined' | 'waitlist-full'> {
-  const attempt = async (as: 'roster' | 'waitlist') => {
-    const { matchPatch, previewPatch } = buildJoinPatch(match, member, as);
+  const attempt = async (from: typeof match, as: 'roster' | 'waitlist') => {
+    const { matchPatch, previewPatch } = buildJoinPatch(from, member, as);
     await commitRosterChange(match.id, matchPatch, previewPatch);
   };
 
   try {
-    await attempt(target);
+    await attempt(match, target);
     return 'joined';
   } catch (error) {
-    if (target === 'roster' && isRejection(error)) {
-      // The same guard the caller applies when it picks 'waitlist' itself. The count is as stale
-      // as everything else the joiner can see, but it is the best available and beats a raw error.
-      if (isWaitlistFull(match)) return 'waitlist-full';
-      try {
-        await attempt('waitlist');
-        return 'joined';
-      } catch (retryError) {
-        handleFirestoreError(retryError, OperationType.UPDATE, `matches/${match.id}`);
-      }
+    if (!isRejection(error)) handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+    // A rejection here usually means someone else wrote the roster first. `buildJoinPatch` rewrites
+    // the arrays from a snapshot, so re-sending the stale one would drop that winner and be denied
+    // again (the rules' symmetric-difference check). A member may read the match: rebuild from fresh.
+    let fresh: typeof match;
+    try {
+      const snap = await getDoc(refs(match.id).matchRef);
+      if (!snap.exists()) throw error;
+      fresh = { ...match, ...(snap.data() as Partial<MatchData>) };
+    } catch {
+      handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
     }
-    handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+    const as = target === 'roster' && isMatchFull(fresh) ? 'waitlist' : target;
+    if (as === 'waitlist' && isWaitlistFull(fresh)) return 'waitlist-full';
+    try {
+      await attempt(fresh, as);
+      return 'joined';
+    } catch (retryError) {
+      handleFirestoreError(retryError, OperationType.UPDATE, `matches/${match.id}`);
+    }
   }
 }
 
@@ -293,6 +301,9 @@ export async function refreshOwnRosterEntry(
   match: MatchData,
   profile: UserProfile,
 ): Promise<void> {
+  // An empty name is "not known yet" (a guest's cleared localStorage), never a rename: writing it
+  // would erase the only copy of the name left, in front of everyone in the match.
+  if (!profile.name.trim()) return;
   const entry = rosterEntryFor(profile);
   const current = match.roster?.[profile.id];
   if (

@@ -118,6 +118,7 @@ const enCatalog = {
     guestTitle: 'Want to organize matches?',
     guestHint: 'Create an account to host your own matches and invite people with a link.',
     guestCta: 'Create account',
+    loadFailed: 'Could not load your matches. Check your connection and reload the page.',
   },
   matches: {
     confirmed: 'Confirmed',
@@ -147,6 +148,7 @@ const enCatalog = {
     leaveHold: 'LEAVE HOLD',
     holdSpotCta: 'HOLD SPOT',
     waitlistFull: 'The hold list is full (4 spots).',
+    joinFailed: 'That did not go through. The match may have changed; please try again.',
     hideFullSquad: 'Hide Full Squad',
     viewFullSquad: 'View Full Squad ({{count}})',
     privateEmail: 'Private Email',

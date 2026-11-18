@@ -44,6 +44,9 @@ import { TeamsSection } from './TeamsSection';
 interface MatchDetailViewProps {
   match: MatchData;
   profile: UserProfile;
+  /** Guests keep their name only in localStorage; the roster is the other copy. */
+  isGuest: boolean;
+  onGuestName: (name: string) => void;
   signUpStatus: SignUpStatus;
   canManage: boolean;
   onBack: () => void;
@@ -58,6 +61,8 @@ interface MatchDetailViewProps {
 export function MatchDetailView({
   match,
   profile,
+  isGuest,
+  onGuestName,
   signUpStatus,
   canManage,
   onBack,
@@ -83,7 +88,12 @@ export function MatchDetailView({
 
   // Names age: let a renamed member's own roster entry catch up when they open the match
   useEffect(() => {
-    if (match.memberIds?.includes(profile.id)) void refreshOwnRosterEntry(match, profile);
+    if (!match.memberIds?.includes(profile.id)) return;
+    // Cleared site data leaves a guest signed in but nameless: take the name back from the roster
+    // rather than let the refresh below overwrite it.
+    const rosterName = match.roster?.[profile.id]?.name;
+    if (isGuest && !profile.name.trim() && rosterName) onGuestName(rosterName);
+    void refreshOwnRosterEntry(match, profile);
   // Deliberately keyed on match.id only: run once per opened match, not on every snapshot or profile change.
   }, [match.id]);
 

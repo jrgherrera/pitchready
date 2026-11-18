@@ -8,6 +8,8 @@ interface MyMatchesScreenProps {
   upcoming: MatchData[];
   past: MatchData[];
   loading: boolean;
+  /** A listener failed for good (missing index, rules): say so rather than show an empty list. */
+  failed: boolean;
   /** Guests cannot create matches: the rules need a registered account. */
   isGuest: boolean;
   canManage: (match: MatchData) => boolean;
@@ -20,6 +22,7 @@ export function MyMatchesScreen({
   upcoming,
   past,
   loading,
+  failed,
   isGuest,
   canManage,
   onOpenMatch,
@@ -59,6 +62,10 @@ export function MyMatchesScreen({
         {loading ? (
           <div className="py-12 flex justify-center text-gray-500">
             <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+        ) : failed ? (
+          <div role="alert" className="bg-[#0a1c17] border border-red-900/40 rounded-xl p-8 text-center text-sm text-red-300">
+            {t('home.loadFailed')}
           </div>
         ) : upcoming.length === 0 ? (
           <div className="bg-[#0a1c17] border border-[#1f453a] rounded-xl p-8 text-center text-sm text-gray-400">

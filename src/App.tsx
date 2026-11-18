@@ -55,7 +55,7 @@ export default function App() {
     updateUserProfile,
   } = useAuth();
 
-  const { upcoming, past, loading: matchesLoading } = useMyMatches(user);
+  const { upcoming, past, loading: matchesLoading, failed: matchesFailed } = useMyMatches(user);
   const matches = [...upcoming, ...past];
 
   const [authView, setAuthView] = useState<AuthView>('login');
@@ -113,10 +113,9 @@ export default function App() {
     activeMatchId &&
     !activeMatch &&
     !authLoading &&
-    !showUpgrade &&
-    // Not 'loading' for a signed-in user (profile still arriving); verify-email and onboarding
-    // do not block joining, only creating a match, so the invitation outranks them.
-    (!user || isGuest || gate !== 'loading')
+    // authLoading is gate === 'loading', so a signed-in user's profile still arriving is excluded
+    // above; verify-email and onboarding do not block joining, so the invitation outranks them.
+    !showUpgrade
   ) {
     return (
       <MatchInviteScreen
@@ -240,6 +239,8 @@ export default function App() {
         <MatchDetailView
           match={activeMatch}
           profile={profile}
+          isGuest={isGuest}
+          onGuestName={setGuestName}
           signUpStatus={signUpStatus}
           canManage={canManage(activeMatch)}
           onBack={() => setActiveMatchId(null)}
@@ -297,7 +298,9 @@ export default function App() {
               }
               onSave={(e) => {
                 e.preventDefault();
-                void updateUserProfile(profile);
+                // Guests have no users/{uid} doc: their "profile" is the cached name alone.
+                if (isGuest) setGuestName(profile.name);
+                else void updateUserProfile(profile);
               }}
               onLogout={() => {
                 void logout();
@@ -312,6 +315,7 @@ export default function App() {
             upcoming={upcoming}
             past={past}
             loading={matchesLoading}
+            failed={matchesFailed}
             isGuest={isGuest}
             canManage={canManage}
             onOpenMatch={setActiveMatchId}

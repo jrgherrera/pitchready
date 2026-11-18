@@ -127,9 +127,11 @@ export function useMatchActions(
           }, 2000);
         }, 1500);
       }
-    } catch (error) {
+    } catch {
+      // joinMatch/leaveMatch already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
       setSignUpStatus('idle');
-      throw error;
+      alert(t('matches.joinFailed'));
     }
   };
 

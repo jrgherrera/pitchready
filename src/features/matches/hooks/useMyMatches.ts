@@ -11,7 +11,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
+import { db, OperationType } from '../../../lib/firebase';
 import type { MatchData } from '../../../types';
 import { PAST_MATCH_LIMIT } from '../../../utils/matches';
 
@@ -42,11 +42,13 @@ function toMatch(docSnap: { id: string; data: () => Record<string, unknown> }): 
  * loop forever, silently, showing stale cached matches. A cache snapshot proves nothing about
  * current access; a server snapshot does. So: one resubscribe per server-confirmed success, and
  * any other `permission-denied` (never succeeded, or denied again right after the retry) is
- * reported as the real fault it is.
+ * reported as the real fault it is: logged, and handed to `onFail` so the screen can say so
+ * instead of spinning forever. (It must not throw: this runs inside the SDK's snapshot callback.)
  */
 function listen(
   constraints: QueryConstraint[],
   onData: (matches: MatchData[]) => void,
+  onFail: () => void,
 ): () => void {
   let unsubscribe = () => {};
   let retriesLeft = 0;
@@ -65,7 +67,8 @@ function listen(
           attach();
           return;
         }
-        handleFirestoreError(error, OperationType.LIST, 'matches');
+        console.error('Firestore Error: ', OperationType.LIST, 'matches', error);
+        onFail();
       },
     );
   };
@@ -82,21 +85,38 @@ export function useMyMatches(user: User | null) {
   const [upcoming, setUpcoming] = useState<MatchData[]>([]);
   const [past, setPast] = useState<MatchData[]>([]);
   const [loaded, setLoaded] = useState({ upcoming: false, past: false });
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    // A different user (or none) must never see the last one's matches, rosters included.
+    setUpcoming([]);
+    setPast([]);
+    setLoaded({ upcoming: false, past: false });
+    setFailed(false);
     if (!user) return;
 
     const now = Timestamp.now();
     const mine = where('memberIds', 'array-contains', user.uid);
 
-    const stopUpcoming = listen([mine, where('date', '>=', now), orderBy('date', 'asc')], (m) => {
-      setUpcoming(m);
-      setLoaded((l) => ({ ...l, upcoming: true }));
-    });
+    const stopUpcoming = listen(
+      [mine, where('date', '>=', now), orderBy('date', 'asc')],
+      (m) => {
+        setUpcoming(m);
+        setLoaded((l) => ({ ...l, upcoming: true }));
+      },
+      () => {
+        setFailed(true);
+        setLoaded((l) => ({ ...l, upcoming: true }));
+      },
+    );
     const stopPast = listen(
       [mine, where('date', '<', now), orderBy('date', 'desc'), limit(PAST_MATCH_LIMIT)],
       (m) => {
         setPast(m);
+        setLoaded((l) => ({ ...l, past: true }));
+      },
+      () => {
+        setFailed(true);
         setLoaded((l) => ({ ...l, past: true }));
       },
     );
@@ -107,5 +127,5 @@ export function useMyMatches(user: User | null) {
     };
   }, [user]);
 
-  return { upcoming, past, loading: !loaded.upcoming || !loaded.past };
+  return { upcoming, past, loading: !loaded.upcoming || !loaded.past, failed };
 }

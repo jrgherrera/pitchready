@@ -119,6 +119,7 @@ export const es: Messages = {
     guestTitle: '¿Quieres organizar partidos?',
     guestHint: 'Crea una cuenta para organizar tus propios partidos e invitar con un enlace.',
     guestCta: 'Crear cuenta',
+    loadFailed: 'No se pudieron cargar tus partidos. Revisa tu conexión y recarga la página.',
   },
   matches: {
     confirmed: 'Confirmado',
@@ -148,6 +149,7 @@ export const es: Messages = {
     leaveHold: 'SALIR DE ESPERA',
     holdSpotCta: 'RESERVAR PLAZA',
     waitlistFull: 'La lista de espera está llena (4 plazas).',
+    joinFailed: 'No se pudo completar. Puede que el partido haya cambiado; inténtalo de nuevo.',
     hideFullSquad: 'Ocultar plantilla',
     viewFullSquad: 'Ver plantilla completa ({{count}})',
     privateEmail: 'Correo privado',
