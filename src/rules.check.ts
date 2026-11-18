@@ -153,6 +153,7 @@ await assertFails(getDoc(doc(outsiderDb, 'matches/full')));
 // A listing is allowed only when its own filters prove the rule — the documents it would return
 // are never consulted — so an unfiltered listing is denied and the membership query is not.
 await assertFails(getDocs(collection(playerDb, 'matches')));
+await assertFails(getDocs(collection(unauthedDb, 'matches')));
 await assertSucceeds(getDocs(query(collection(playerDb, 'matches'), where('memberIds', 'array-contains', 'player'))));
 // Substituting someone else's uid is the one query that would hand a stranger a target's whole
 // history: the filter proves membership for 'host', which is not the caller.
@@ -204,6 +205,12 @@ await assertSucceeds(updateDoc(doc(anonDb, 'matches/joinme'), {
   joinedPlayerIds: ['host', 'stranger', 'anon'], memberIds: ['host', 'stranger', 'anon'],
   'roster.anon': { name: 'A' }, updatedAt: 'x',
 }));
+// And having joined, an anonymous attendee reads the match: the guest path this feature exists for,
+// and the only actor whose token makes isSuperAdmin() error outright. Pinned for the behaviour
+// itself, not because operand order saves it — an erroring operand loses to a true one either way
+// (measured; see the note on `allow get` in firestore.rules).
+await assertSucceeds(getDoc(doc(anonDb, 'matches/joinme')));
+await assertSucceeds(getDocs(query(collection(anonDb, 'matches'), where('memberIds', 'array-contains', 'anon'))));
 
 // Leaving revokes your own read. This is the cause of the permission-denied that useMyMatches
 // swallows on purpose — pinned here so nobody later "fixes" the rule instead of the handler.

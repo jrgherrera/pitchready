@@ -78,15 +78,15 @@ service cloud.firestore {
       }
 
       // A match is visible to its members only — creator, roster and waitlist all ride in memberIds.
-      // Two shapes here are load-bearing, and both are because an ERROR anywhere in the expression
-      // denies, whichever side of the `||` it lands on and whatever the other side evaluates to:
-      //   - membership first, unlike isMatchOwner(): isSuperAdmin() reads request.auth.token.email,
-      //     which is undefined for an anonymous attendee, so a member short-circuits before it;
-      //   - .get('memberIds', []) rather than .memberIds: a document without the key must read as
-      //     "not a member", not as an error, which would deny the super admin too and leave a
-      //     legacy document with no memberIds unreachable by any client.
       // isSuperAdmin() is break-glass for a single known id, deliberately NOT on `list`: reading one
       // document the owner names is a different cost class from enumerating the collection.
+      // isSuperAdmin() errors for a token with no email claim, which is every anonymous attendee's,
+      // and that is harmless: measured in the emulator, an erroring operand loses to a true one in
+      // either position (`error || true` ALLOWS, `error || false` DENIES), so an error decides the
+      // outcome only when no branch is true. Operand order is therefore free here — a member reads
+      // whichever side isSuperAdmin() sits on — and the .get(..., default) calls are defence in
+      // depth, not a requirement: they keep every branch a plain boolean. Earlier revisions of this
+      // comment claimed both were load-bearing. They are not; the measurement says so.
       allow get: if isSignedIn()
         && (request.auth.uid in resource.data.get('memberIds', []) || isSuperAdmin());
 

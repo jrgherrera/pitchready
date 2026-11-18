@@ -59,7 +59,10 @@ export function useAuth() {
   // synthesized guest profile. Clear it explicitly first, then load the real one.
   const reapplyAfterLink = async () => {
     const current = auth.currentUser;
-    if (!current || !applyUserRef.current) return;
+    // Hoisted past the await below: the ref can be cleared while the token round trip is in
+    // flight, which the null check above would no longer cover.
+    const apply = applyUserRef.current;
+    if (!current || !apply) return;
     // Linking keeps the uid AND the existing ID token, which can still carry
     // firebase.sign_in_provider: 'anonymous'. The rules gate users writes and match creation on
     // that claim (isRegistered), so without a forced refresh the upgraded guest's onboarding
@@ -72,7 +75,7 @@ export function useAuth() {
     }
     setProfile(null);
     setUser(current);
-    applyUserRef.current(current);
+    apply(current);
   };
 
   useEffect(() => {
