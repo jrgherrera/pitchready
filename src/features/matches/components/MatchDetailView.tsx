@@ -7,6 +7,7 @@ import {
   Clock,
   Loader2,
   Pencil,
+  Share2,
   Trash2,
   UserPlus,
   Zap,
@@ -34,9 +35,11 @@ import {
   isMatchFull,
   resolveRoster,
   resolveWaitlist,
+  shareMatchLink,
 } from '../../../utils/matches';
 import { MATCH_HERO_IMAGE } from '../constants';
 import { AddPlusOneModal } from './AddPlusOneModal';
+import { ConfirmDeleteMatchModal } from './ConfirmDeleteMatchModal';
 import { MatchLocationMap } from './MatchLocationMap';
 import { RemoveGuestModal } from './RemoveGuestModal';
 import { TeamsSection } from './TeamsSection';
@@ -84,6 +87,8 @@ export function MatchDetailView({
     photoURL?: string;
   } | null>(null);
   const [removingGuest, setRemovingGuest] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletingMatch, setDeletingMatch] = useState(false);
 
 
   // Names age: let a renamed member's own roster entry catch up when they open the match
@@ -167,6 +172,16 @@ export function MatchDetailView({
     }
   };
 
+  const confirmDeleteMatch = async () => {
+    setDeletingMatch(true);
+    try {
+      await onDelete(match.id);
+      setConfirmingDelete(false);
+    } finally {
+      setDeletingMatch(false);
+    }
+  };
+
   const removeHost =
     guestToRemove &&
     ((match.roster?.[guestToRemove.addedBy] && { id: guestToRemove.addedBy, ...match.roster[guestToRemove.addedBy] }) || {
@@ -189,6 +204,13 @@ export function MatchDetailView({
             {t('brand')}
           </span>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => shareMatchLink(match.id)}
+              aria-label={t('matches.share')}
+              className="p-2 rounded-lg bg-[#0f2d24] text-gray-300 hover:text-white hover:bg-[#1f453a] border border-[#1f453a] transition-all active:scale-95"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
             <img
               src={getAvatarUrl(profile.id, profile.photoURL)}
               alt={profile.name}
@@ -629,7 +651,7 @@ export function MatchDetailView({
               <Pencil className="w-4 h-4" /> {t('matches.editMatch')}
             </button>
             <button
-              onClick={() => onDelete(match.id)}
+              onClick={() => setConfirmingDelete(true)}
               className="w-full bg-red-950/40 hover:bg-red-900/50 text-red-400 border border-red-900/60 font-anton py-3.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-2"
             >
               <Trash2 className="w-4 h-4" /> {t('matches.cancelDelete')}
@@ -711,6 +733,17 @@ export function MatchDetailView({
           onClose={() => setShowPlusOneModal(false)}
           onConfirm={() => {
             void confirmPlusOne();
+          }}
+        />
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDeleteMatchModal
+          matchTitle={match.title}
+          busy={deletingMatch}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => {
+            void confirmDeleteMatch();
           }}
         />
       )}

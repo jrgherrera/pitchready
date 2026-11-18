@@ -74,8 +74,13 @@ export function useMatchActions(
     }
   };
 
+  /**
+   * Raw delete: it does NOT confirm. Both callers (the card in the list and the detail view) put
+   * `ConfirmDeleteMatchModal` in front of it. A `window.confirm` used to live here, and putting one
+   * back would double-confirm every deletion -- modal, then native dialog -- so the guard belongs in
+   * exactly one place and that place is the UI, which can name the match being destroyed.
+   */
   const deleteMatch = async (matchId: string) => {
-    if (!window.confirm(t('matches.confirmDelete'))) return;
     await deleteMatchEverywhere(matchId);
     onMatchDeleted?.();
   };

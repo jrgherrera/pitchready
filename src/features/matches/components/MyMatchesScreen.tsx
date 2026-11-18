@@ -18,6 +18,7 @@ interface MyMatchesScreenProps {
   isGuest: boolean;
   canManage: (match: MatchData) => boolean;
   onOpenMatch: (matchId: string) => void;
+  onDeleteMatch: (matchId: string) => void | Promise<void>;
   onCreateMatch: () => void;
   onCreateAccount: () => void;
 }
@@ -30,6 +31,7 @@ export function MyMatchesScreen({
   isGuest,
   canManage,
   onOpenMatch,
+  onDeleteMatch,
   onCreateMatch,
   onCreateAccount,
 }: MyMatchesScreenProps) {
@@ -83,6 +85,7 @@ export function MyMatchesScreen({
                 match={match}
                 canManage={canManage(match)}
                 onOpen={onOpenMatch}
+                onDelete={onDeleteMatch}
               />
             ))}
           </div>

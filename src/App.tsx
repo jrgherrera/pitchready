@@ -321,6 +321,7 @@ export default function App() {
             isGuest={isGuest}
             canManage={canManage}
             onOpenMatch={setActiveMatchId}
+            onDeleteMatch={deleteMatch}
             onCreateMatch={() => setShowCreateModal(true)}
             onCreateAccount={() => {
               clearMessages();

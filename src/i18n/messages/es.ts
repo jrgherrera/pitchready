@@ -165,8 +165,12 @@ export const es: Messages = {
     leaveMatch: 'SALIR DEL PARTIDO',
     signUpNow: 'INSCRIBIRSE',
     defaultTitle: 'Partido PitchReady',
-    confirmDelete: '¿Seguro que quieres eliminar este partido?',
+    deleteMatchTitle: 'Eliminar partido',
+    deleteMatchBody:
+      'Esto no se puede deshacer. El partido desaparece para todos los que se unieron y su enlace deja de funcionar.',
+    deleteMatchConfirm: 'Eliminar',
     alreadyFull: '¡Este partido ya está completo!',
+    share: 'Compartir enlace del partido',
     shareCopied: '¡Enlace del partido copiado al portapapeles!',
     invite: {
       title: 'ESTÁS INVITADO',

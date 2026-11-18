@@ -164,8 +164,12 @@ const enCatalog = {
     leaveMatch: 'LEAVE MATCH',
     signUpNow: 'SIGN UP NOW',
     defaultTitle: 'PitchReady Match',
-    confirmDelete: 'Are you sure you want to delete this match?',
+    deleteMatchTitle: 'Delete match',
+    deleteMatchBody:
+      'This cannot be undone. The match disappears for everyone who joined, and its invite link stops working.',
+    deleteMatchConfirm: 'Delete',
     alreadyFull: 'This match is already full!',
+    share: 'Share match link',
     shareCopied: 'Shareable match link copied to clipboard!',
     invite: {
       title: "YOU'RE INVITED",
