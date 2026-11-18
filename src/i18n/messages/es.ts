@@ -115,6 +115,7 @@ export const es: Messages = {
     upcoming: 'Próximos partidos',
     past: 'Partidos pasados',
     emptyUpcoming: 'No tienes partidos próximos. Crea uno y comparte su enlace, o abre un enlace que te hayan enviado.',
+    emptyUpcomingGuest: 'No tienes partidos próximos. Abre un enlace que te hayan enviado para unirte a uno.',
     guestTitle: '¿Quieres organizar partidos?',
     guestHint: 'Crea una cuenta para organizar tus propios partidos e invitar con un enlace.',
     guestCta: 'Crear cuenta',

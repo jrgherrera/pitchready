@@ -114,6 +114,7 @@ const enCatalog = {
     upcoming: 'Upcoming Matches',
     past: 'Past Matches',
     emptyUpcoming: 'No upcoming matches. Create one and share its link, or open a link someone sent you.',
+    emptyUpcomingGuest: 'No upcoming matches. Open a link someone sent you to join one.',
     guestTitle: 'Want to organize matches?',
     guestHint: 'Create an account to host your own matches and invite people with a link.',
     guestCta: 'Create account',

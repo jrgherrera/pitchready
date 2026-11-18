@@ -62,7 +62,7 @@ export function MyMatchesScreen({
           </div>
         ) : upcoming.length === 0 ? (
           <div className="bg-[#0a1c17] border border-[#1f453a] rounded-xl p-8 text-center text-sm text-gray-400">
-            {t('home.emptyUpcoming')}
+            {t(isGuest ? 'home.emptyUpcomingGuest' : 'home.emptyUpcoming')}
           </div>
         ) : (
           <div className="space-y-4">
@@ -78,8 +78,9 @@ export function MyMatchesScreen({
         )}
       </div>
 
+      {/* Past is recessed by muting colours, not opacity, so text keeps its contrast */}
       {!loading && past.length > 0 && (
-        <div className="opacity-60">
+        <div className="[&_h3]:text-gray-300 [&_.text-\[\#d4f000\]]:text-gray-400 [&_button]:bg-[#0f2d24] [&_button]:text-[#d4f000] [&_button]:border [&_button]:border-[#1f453a]">
           <h2 className="font-anton text-sm uppercase tracking-wider text-gray-400 mb-3">
             {t('home.past')}
           </h2>
