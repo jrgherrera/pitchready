@@ -1,7 +1,7 @@
 /** Characterization of firestore.rules — run: npm run check:rules (needs the Firestore emulator) */
 import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query, setLogLevel, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, increment, limit, orderBy, query, setLogLevel, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 
 setLogLevel('silent'); // assertFails checks the permission-denied code, not the log
 
@@ -205,6 +205,29 @@ await assertSucceeds(updateDoc(doc(anonDb, 'matches/joinme'), {
   joinedPlayerIds: ['host', 'stranger', 'anon'], memberIds: ['host', 'stranger', 'anon'],
   'roster.anon': { name: 'A' }, updatedAt: 'x',
 }));
+// The shape joinMatchByLink really sends: arrayUnion on the arrays plus increment(1) on the preview,
+// in one batch. The preview rule resolves getAfter(match) against the pending write, so this is the
+// path where a typo in either rule would break every link join. joinme holds host, stranger and anon
+// here, so the preview is seeded to that count and the batch must land it on 4.
+await env.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'matchPreviews/joinme'), { occupiedCount: 3 });
+});
+const anonymousClaims = { firebase: { sign_in_provider: 'anonymous', identities: {} } };
+const lateDb = env.authenticatedContext('late', anonymousClaims).firestore();
+const linkJoin = (db: typeof lateDb, uid: string, field: 'joinedPlayerIds' | 'waitlistPlayerIds') => {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'matches/joinme'), {
+    [field]: arrayUnion(uid), memberIds: arrayUnion(uid), [`roster.${uid}`]: { name: 'L' }, updatedAt: 'x',
+  });
+  if (field === 'joinedPlayerIds') batch.set(doc(db, 'matchPreviews/joinme'), { occupiedCount: increment(1) }, { merge: true });
+  return batch.commit();
+};
+await assertSucceeds(linkJoin(lateDb, 'late', 'joinedPlayerIds'));
+// Same link opened twice: arrayUnion changes nothing but increment still bumps, so the preview
+// would drift off the derived count and the rules refuse (joinMatchByLink then checks membership).
+await assertFails(linkJoin(lateDb, 'late', 'joinedPlayerIds'));
+// A waitlister moves no counter: arrayUnion on the waitlist alone is accepted.
+await assertSucceeds(linkJoin(env.authenticatedContext('late2', anonymousClaims).firestore(), 'late2', 'waitlistPlayerIds'));
 // And having joined, an anonymous attendee reads the match: the guest path this feature exists for.
 // What is unique to this actor is the anonymous provider, not an email-less token — every mock
 // token here lacks the email claim, so isSuperAdmin() errors for all of them, harmlessly: an

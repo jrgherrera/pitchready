@@ -2,7 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global Safety Net
+    // Documentation only: Firestore ORs `allow` rules, so this denies nothing. Access is whatever the
+    // per-collection rules below grant; add a real guard there, not here.
     match /{document=**} {
       allow read, write: if false;
     }
