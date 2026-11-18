@@ -155,13 +155,18 @@ async function commitRosterChange(
   await batch.commit();
 }
 
-/** Only members can read a match, so a successful read proves the signed-in user is one. */
+/**
+ * Only members can read a match, so a successful read proves the signed-in user is one. Only a
+ * server `permission-denied` proves they are not; any other failure (offline, unavailable) proves
+ * nothing, and guessing "not a member" would retry a duplicate onto the waitlist, so it surfaces.
+ */
 async function isAlreadyMember(matchId: string): Promise<boolean> {
   try {
     await getDoc(refs(matchId).matchRef);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (isRejection(error)) return false;
+    handleFirestoreError(error, OperationType.GET, `matches/${matchId}`);
   }
 }
 
