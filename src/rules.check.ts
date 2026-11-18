@@ -212,7 +212,7 @@ await assertSucceeds(updateDoc(doc(anonDb, 'matches/joinme'), {
 await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(ctx.firestore(), 'matchPreviews/joinme'), { occupiedCount: 3 });
 });
-const anonymousClaims = { firebase: { sign_in_provider: 'anonymous', identities: {} } };
+const anonymousClaims = { firebase: { sign_in_provider: 'anonymous' as const, identities: {} } };
 const lateDb = env.authenticatedContext('late', anonymousClaims).firestore();
 const linkJoin = (db: typeof lateDb, uid: string, field: 'joinedPlayerIds' | 'waitlistPlayerIds') => {
   const batch = writeBatch(db);
