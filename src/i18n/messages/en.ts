@@ -180,6 +180,7 @@ const enCatalog = {
       landedOnWaitlist: 'The match filled up while you were joining, so you are on the waitlist.',
       stuck: 'You are in, but the match is slow to load. Reload to see it.',
       reload: 'Reload',
+      alreadyJoined: 'You have already joined this match.',
       notFound: 'This match no longer exists, or the link is wrong.',
       exit: 'Back to PitchReady',
     },

@@ -102,7 +102,8 @@ export function MatchInviteScreen({
       const target = full ? 'waitlist' : 'roster';
       const landed = await joinMatchByLink(matchId, { id: uid, ...member }, target);
       // Say so when the preview was stale and the roster join fell back to the waitlist
-      if (landed !== target) setNotice(t('matches.invite.landedOnWaitlist'));
+      if (landed === 'already-member') setNotice(t('matches.invite.alreadyJoined'));
+      else if (landed !== target) setNotice(t('matches.invite.landedOnWaitlist'));
       setJoined(true);
     } catch (err) {
       setBusy(false);

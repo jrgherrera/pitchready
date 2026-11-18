@@ -181,6 +181,7 @@ export const es: Messages = {
       landedOnWaitlist: 'El partido se llenó mientras te unías, así que estás en la lista de espera.',
       stuck: 'Ya estás dentro, pero el partido tarda en cargar. Recarga para verlo.',
       reload: 'Recargar',
+      alreadyJoined: 'Ya te uniste a este partido.',
       notFound: 'Este partido ya no existe, o el enlace es incorrecto.',
       exit: 'Volver a PitchReady',
     },

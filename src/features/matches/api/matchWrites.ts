@@ -2,6 +2,7 @@ import {
   arrayUnion,
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   query,
@@ -154,6 +155,16 @@ async function commitRosterChange(
   await batch.commit();
 }
 
+/** Only members can read a match, so a successful read proves the signed-in user is one. */
+async function isAlreadyMember(matchId: string): Promise<boolean> {
+  try {
+    await getDoc(refs(matchId).matchRef);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isRejection(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === 'permission-denied';
 }
@@ -208,13 +219,17 @@ export async function joinMatch(
  * Nothing in the rules caps the waitlist, so the joiner cannot learn it is full from here.
  *
  * Resolves to the list they actually landed on, so the caller can say so when a roster join was
- * downgraded to the waitlist.
+ * downgraded to the waitlist, or to 'already-member' when the denial was a duplicate join (the same
+ * link joined from two tabs). A duplicate must NOT retry: arrayUnion leaves the match unchanged
+ * but increment(1) pushes the preview off the derived count, so the batch is denied; retrying as
+ * waitlist then succeeds and leaves the uid on both lists. The read gate is the oracle: `get`
+ * requires uid in memberIds, so a readable match means the joiner was already in.
  */
 export async function joinMatchByLink(
   matchId: string,
   member: { id: string } & RosterMember,
   target: 'roster' | 'waitlist',
-): Promise<'roster' | 'waitlist'> {
+): Promise<'roster' | 'waitlist' | 'already-member'> {
   const attempt = async (as: 'roster' | 'waitlist') => {
     const { matchRef, previewRef } = refs(matchId);
     const batch = writeBatch(db);
@@ -233,6 +248,7 @@ export async function joinMatchByLink(
     return target;
   } catch (error) {
     if (target === 'roster' && isRejection(error)) {
+      if (await isAlreadyMember(matchId)) return 'already-member';
       try {
         await attempt('waitlist');
         return 'waitlist';
