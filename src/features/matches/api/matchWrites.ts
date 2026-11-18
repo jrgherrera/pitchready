@@ -206,12 +206,15 @@ export async function joinMatch(
  * The preview is only bumped for a roster join; a waitlister does not change `occupiedCount`.
  * A roster join the rules refuse (the match filled meanwhile) retries once as a waitlist join.
  * Nothing in the rules caps the waitlist, so the joiner cannot learn it is full from here.
+ *
+ * Resolves to the list they actually landed on, so the caller can say so when a roster join was
+ * downgraded to the waitlist.
  */
 export async function joinMatchByLink(
   matchId: string,
   member: { id: string } & RosterMember,
   target: 'roster' | 'waitlist',
-): Promise<void> {
+): Promise<'roster' | 'waitlist'> {
   const attempt = async (as: 'roster' | 'waitlist') => {
     const { matchRef, previewRef } = refs(matchId);
     const batch = writeBatch(db);
@@ -227,11 +230,12 @@ export async function joinMatchByLink(
 
   try {
     await attempt(target);
+    return target;
   } catch (error) {
     if (target === 'roster' && isRejection(error)) {
       try {
         await attempt('waitlist');
-        return;
+        return 'waitlist';
       } catch (retryError) {
         handleFirestoreError(retryError, OperationType.UPDATE, `matches/${matchId}`);
       }

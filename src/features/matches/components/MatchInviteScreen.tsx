@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import { Calendar, Loader2, MapPin, Users } from 'lucide-react';
@@ -39,11 +39,21 @@ export function MatchInviteScreen({
   const { t, locale } = useI18n();
   const { preview, loading, notFound } = useMatchPreview(matchId);
   const registered = !!user && !isGuest(user);
-  const [name, setName] = useState(() => (user && profile ? profile.name : ''));
+  const [name, setName] = useState(() => profile?.name ?? '');
   // Stays true after a successful write: the match appears in the member list a moment later and
   // App swaps this screen for the detail view. Re-enabling the button in between invites a double join.
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [joined, setJoined] = useState(false);
+  const [stuck, setStuck] = useState(false);
+
+  // The match should show up in the member list within moments; if it never does, offer a way out.
+  useEffect(() => {
+    if (!joined) return;
+    const id = setTimeout(() => setStuck(true), 10000);
+    return () => clearTimeout(id);
+  }, [joined]);
 
   if (loading || (!membershipKnown && !busy)) return <LoadingScreen />;
 
@@ -63,18 +73,24 @@ export function MatchInviteScreen({
 
   const full = preview.occupiedCount >= preview.capacity;
   const typedName = name.trim();
+  // Guests, and registered users who never finished onboarding (no profile name yet), type one
+  const needsName = !registered || !profile?.name;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy || (!registered && !typedName)) return;
+    if (busy || (needsName && !typedName)) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       let uid: string;
       let member: ReturnType<typeof rosterEntryFor>;
-      if (registered && user && profile) {
+      if (registered && user && !needsName && profile) {
         uid = user.uid;
         member = rosterEntryFor(profile);
+      } else if (registered && user) {
+        uid = user.uid;
+        member = { name: typedName };
       } else {
         // The name goes in first: the guest profile is built from it the moment the session starts.
         storeGuestName(typedName);
@@ -83,14 +99,20 @@ export function MatchInviteScreen({
         if (user) onGuestName(typedName);
         member = { name: typedName };
       }
-      await joinMatchByLink(matchId, { id: uid, ...member }, full ? 'waitlist' : 'roster');
+      const target = full ? 'waitlist' : 'roster';
+      const landed = await joinMatchByLink(matchId, { id: uid, ...member }, target);
+      // Say so when the preview was stale and the roster join fell back to the waitlist
+      if (landed !== target) setNotice(t('matches.invite.landedOnWaitlist'));
+      setJoined(true);
     } catch (err) {
       setBusy(false);
       setError(err instanceof Error && !err.message.startsWith('{') ? err.message : t('auth.errors.generic'));
     }
   };
 
-  const host = preview.creatorName || t('matches.invite.hostFallback');
+  const hostLine = preview.creatorName
+    ? t('matches.invite.hostedBy', { name: preview.creatorName })
+    : t('matches.invite.hostUnknown');
 
   return (
     <AuthLayout title={t('matches.invite.title')} subtitle={t('matches.invite.subtitle')}>
@@ -114,7 +136,7 @@ export function MatchInviteScreen({
             })}
           </p>
           <p className="text-xs text-gray-400 uppercase tracking-wider">
-            {t('matches.invite.hostedBy', { name: host })}
+            {hostLine}
           </p>
         </div>
 
@@ -122,8 +144,10 @@ export function MatchInviteScreen({
           <AuthMessage status={t('matches.invite.fullNotice')} />
         )}
         <AuthMessage error={error} />
+        <AuthMessage status={notice} />
+        {stuck && <AuthMessage error={t('matches.invite.stuck')} />}
 
-        {registered ? (
+        {!needsName ? (
           <p className="text-sm text-gray-300">{t('matches.invite.joinAs', { name: profile?.name ?? '' })}</p>
         ) : (
           <div className="space-y-1">
@@ -143,9 +167,18 @@ export function MatchInviteScreen({
           </div>
         )}
 
+        {stuck ? (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="w-full bg-[#d4f000] text-[#001710] font-anton py-4 uppercase tracking-wider rounded-lg text-base"
+          >
+            {t('matches.invite.reload')}
+          </button>
+        ) : (
         <button
           type="submit"
-          disabled={busy || (!registered && !typedName)}
+          disabled={busy || (needsName && !typedName)}
           className="w-full bg-[#d4f000] text-[#001710] font-anton py-4 uppercase tracking-wider rounded-lg text-base flex items-center justify-center gap-2 disabled:opacity-60"
         >
           {busy ? (
@@ -158,6 +191,7 @@ export function MatchInviteScreen({
             t('matches.invite.join')
           )}
         </button>
+        )}
       </form>
     </AuthLayout>
   );

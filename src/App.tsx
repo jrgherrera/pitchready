@@ -112,7 +112,9 @@ export default function App() {
     !activeMatch &&
     !authLoading &&
     !showUpgrade &&
-    (!user || isGuest || gate === 'ready')
+    // Not 'loading' for a signed-in user (profile still arriving); verify-email and onboarding
+    // do not block joining, only creating a match, so the invitation outranks them.
+    (!user || isGuest || gate !== 'loading')
   ) {
     return (
       <MatchInviteScreen
