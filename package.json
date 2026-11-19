@@ -13,6 +13,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy:hosting": "vite build && firebase deploy --only hosting --project pitchready-soccer",
+    "deploy:firestore": "firebase deploy --only firestore:rules,firestore:indexes --project pitchready-soccer",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "check:rules": "firebase emulators:exec --only firestore \"npx tsx src/rules.check.ts\""

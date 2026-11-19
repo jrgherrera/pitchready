@@ -269,5 +269,63 @@ await assertSucceeds(setDoc(doc(playerDb, 'users/player'), { displayName: 'x' },
 // users update: admin flag must stay unchanged (false -> true denied on an existing own doc)
 await assertFails(setDoc(doc(playerDb, 'users/player'), { admin: true }, { merge: true }));
 
+// A drifted matchPreviews.occupiedCount, and the heal that `claimOpenSpot` performs. This is the
+// reason that function exists: the counter is off by one below (0 against a roster of 1), so
+// `increment(1)` can never equal the count the preview rule derives from the match, and the link
+// roster-join is refused on a match with nine free spots. Every joiner is then silently held, for
+// good, because nothing else in the app ever writes an absolute count for them. Seeds its own
+// fixtures — m1 is gone by this point.
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'matches/drift'), {
+    creatorId: 'host', capacity: 10, date: new Date('2026-12-01T19:00:00Z'),
+    joinedPlayerIds: ['host'], waitlistPlayerIds: [], guests: [],
+    memberIds: ['host'], roster: { host: { name: 'H' } },
+  });
+  await setDoc(doc(db, 'matchPreviews/drift'), { occupiedCount: 0 });
+});
+const heldDb = env.authenticatedContext('held', anonymousClaims).firestore();
+const driftRosterJoin = () => {
+  const b = writeBatch(heldDb);
+  b.update(doc(heldDb, 'matches/drift'), {
+    joinedPlayerIds: arrayUnion('held'), memberIds: arrayUnion('held'),
+    'roster.held': { name: 'H' }, updatedAt: 'x',
+  });
+  b.set(doc(heldDb, 'matchPreviews/drift'), { occupiedCount: increment(1) }, { merge: true });
+  return b.commit();
+};
+// The refusal that masquerades as "the match filled meanwhile".
+await assertFails(driftRosterJoin());
+// The fallback lands, which is what makes the joiner a member and the match readable to them.
+await assertSucceeds(updateDoc(doc(heldDb, 'matches/drift'), {
+  waitlistPlayerIds: arrayUnion('held'), memberIds: arrayUnion('held'),
+  'roster.held': { name: 'H' }, updatedAt: 'x',
+}));
+await assertSucceeds(getDoc(doc(heldDb, 'matches/drift')));
+// claimOpenSpot's write: buildJoinPatch's whole arrays plus an ABSOLUTE occupiedCount. It takes
+// the open spot, drops the waitlist entry and leaves the counter in step with the roster again.
+const healDrift = () => {
+  const b = writeBatch(heldDb);
+  b.update(doc(heldDb, 'matches/drift'), {
+    joinedPlayerIds: ['host', 'held'], waitlistPlayerIds: [], guests: [],
+    memberIds: ['host', 'held'], 'roster.held': { name: 'H' }, updatedAt: 'x',
+  });
+  b.set(doc(heldDb, 'matchPreviews/drift'), { occupiedCount: 2 }, { merge: true });
+  return b.commit();
+};
+await assertSucceeds(healDrift());
+// And with the counter healed, the next link joiner's increment(1) is accepted again.
+const nextDb = env.authenticatedContext('next', anonymousClaims).firestore();
+const nextRosterJoin = () => {
+  const b = writeBatch(nextDb);
+  b.update(doc(nextDb, 'matches/drift'), {
+    joinedPlayerIds: arrayUnion('next'), memberIds: arrayUnion('next'),
+    'roster.next': { name: 'N' }, updatedAt: 'x',
+  });
+  b.set(doc(nextDb, 'matchPreviews/drift'), { occupiedCount: increment(1) }, { merge: true });
+  return b.commit();
+};
+await assertSucceeds(nextRosterJoin());
+
 await env.cleanup();
 console.log('rules.check: ok');

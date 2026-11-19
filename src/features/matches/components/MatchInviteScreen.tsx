@@ -39,7 +39,13 @@ export function MatchInviteScreen({
   const { t, locale } = useI18n();
   const { preview, loading, notFound } = useMatchPreview(matchId);
   const registered = !!user && !isGuest(user);
-  const [name, setName] = useState(() => profile?.name ?? '');
+  // `null` until they touch the field, so the name we already know can still fill it in. A
+  // returning guest's profile is null on the first render (auth is still restoring the anonymous
+  // session) and arrives a tick later, so a `useState` initializer reading it strands the field
+  // empty and makes them retype a name the app has had all along. An empty string is a deliberate
+  // clearing and is kept: only `null` falls through.
+  const [draft, setDraft] = useState<string | null>(null);
+  const name = draft ?? profile?.name ?? '';
   // Stays true after a successful write: the match appears in the member list a moment later and
   // App swaps this screen for the detail view. Re-enabling the button in between invites a double join.
   const [busy, setBusy] = useState(false);
@@ -163,7 +169,7 @@ export function MatchInviteScreen({
               autoComplete="name"
               placeholder={t('matches.invite.namePlaceholder')}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setDraft(e.target.value)}
             />
           </div>
         )}
