@@ -4,6 +4,7 @@ import { useT } from '../../../i18n';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, SignUpStatus, UserProfile } from '../../../types';
 import {
+  atGuestCap,
   canManageMatch,
   getOccupiedCount,
   isMatchFull,
@@ -152,18 +153,15 @@ export function useMatchActions(
       return;
     }
 
-    // Capacity is the only ceiling the owner faces: isMatchOwner() in firestore.rules bypasses
-    // withinCapacity(), so the rules accept an over-capacity roster from the owner and this check
-    // is the only thing stopping one.
+    // Capacity is the only ceiling the owner or a super admin faces: isMatchOwner() in
+    // firestore.rules (isSuperAdmin() || creatorId == auth.uid) bypasses withinCapacity(), so the
+    // rules accept an over-capacity roster from either and this check is the only thing stopping one.
     if (getOccupiedCount(match) >= match.capacity) {
       alert(t('matches.alreadyFull'));
       return;
     }
 
-    if (
-      !canManageMatch(match, profile, superAdminMode) &&
-      (match.guests ?? []).some((g) => g.addedBy === profile.id)
-    ) {
+    if (atGuestCap(match, profile.id, canManageMatch(match, profile, superAdminMode))) {
       alert(t('matches.oneGuestOnly'));
       return;
     }
@@ -175,7 +173,13 @@ export function useMatchActions(
       name,
     };
 
-    await setGuestList(match, [...(match.guests ?? []), guest]);
+    try {
+      await setGuestList(match, [...(match.guests ?? []), guest]);
+    } catch {
+      // setGuestList already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
+      alert(t('matches.joinFailed'));
+    }
   };
 
   const removeGuestPlusOne = async (match: MatchData, guestId: string) => {
@@ -193,10 +197,16 @@ export function useMatchActions(
       return;
     }
 
-    await setGuestList(
-      match,
-      (match.guests ?? []).filter((g) => g.id !== guestId),
-    );
+    try {
+      await setGuestList(
+        match,
+        (match.guests ?? []).filter((g) => g.id !== guestId),
+      );
+    } catch {
+      // setGuestList already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
+      alert(t('matches.joinFailed'));
+    }
   };
 
   /**

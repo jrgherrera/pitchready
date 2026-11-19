@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { t } from '../i18n';
 import type { MatchData } from '../types';
-import { computeMemberIds, resolveRoster, rosterEntryFor } from './matches';
+import { atGuestCap, computeMemberIds, resolveRoster, rosterEntryFor } from './matches';
 
 // Creator, roster and waitlist in one array, creator first, no duplicates.
 assert.deepEqual(
@@ -70,6 +70,16 @@ assert.deepEqual(
   const guests = resolveRoster(match).filter((e) => e.kind === 'guest');
   assert.equal(guests[0].name, 'Primo Juan');
   assert.equal(guests[1].name, t('matches.guest'), 'no name, no undefined');
+}
+
+// The one-+1-per-person cap: reached once you brought one, and never applied to the owner.
+{
+  const match = {
+    guests: [{ id: 'g1', addedBy: 'u2', createdAt: 'x' }],
+  } as unknown as MatchData;
+  assert.equal(atGuestCap(match, 'u2', false), true, 'a non-owner who brought a +1 is capped');
+  assert.equal(atGuestCap(match, 'u2', true), false, 'the owner is exempt');
+  assert.equal(atGuestCap(match, 'u3', false), false, 'a non-owner with no +1 can bring one');
 }
 
 console.log('matches.check: ok');

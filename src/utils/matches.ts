@@ -39,6 +39,14 @@ export function canManageMatch(
   return match.creatorId === profile.id || (superAdminMode && isSuperAdmin(profile));
 }
 
+/**
+ * The one-+1-per-person cap applies and is already reached. The owner is exempt (capacity is their
+ * only ceiling). The detail view and useMatchActions both ask this; keep it the only copy.
+ */
+export function atGuestCap(match: Pick<MatchData, 'guests'>, uid: string, canManage: boolean) {
+  return !canManage && (match.guests ?? []).some((g) => g.addedBy === uid);
+}
+
 /** Existing match back into the create/edit form shape. */
 export function matchToForm(match: MatchData): CreateMatchForm {
   const { day, time } = toDateTimeInputs(match.date);

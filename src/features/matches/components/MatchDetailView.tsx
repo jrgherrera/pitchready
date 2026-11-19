@@ -30,6 +30,7 @@ import {
   openMapsDirections,
 } from '../../../utils/location';
 import {
+  atGuestCap,
   getCapacityPercent,
   getOccupiedCount,
   getSpotsLeft,
@@ -139,7 +140,7 @@ export function MatchDetailView({
       alert(t('matches.signUpToAddGuest'));
       return;
     }
-    if ((match.guests ?? []).some((g) => g.addedBy === profile.id)) {
+    if (atGuestCap(match, profile.id, canManage)) {
       alert(t('matches.oneGuestOnly'));
       return;
     }
