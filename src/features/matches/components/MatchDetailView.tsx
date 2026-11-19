@@ -39,6 +39,7 @@ import {
   isWaitlistFull,
   resolveRoster,
   resolveWaitlist,
+  type RosterEntry,
   shareMatchLink,
 } from '../../../utils/matches';
 import { MATCH_HERO_IMAGE } from '../constants';
@@ -65,7 +66,7 @@ interface MatchDetailViewProps {
   onSaveTeams: (match: MatchData, teams: string[][]) => Promise<void>;
   onEdit: (match: MatchData) => void;
   onDelete: (matchId: string) => void;
-  onCreateAccount?: () => void;
+  onCreateAccount: () => void;
 }
 
 export function MatchDetailView({
@@ -190,6 +191,40 @@ export function MatchDetailView({
 
   /** The owner can manage anyone but themselves; useMatchActions re-checks both. */
   const canManageMember = (uid: string) => canManage && uid !== profile.id;
+
+  /** What tapping an entry does, or null if nothing. One rule for the chips and the full squad. */
+  const tapHandlerFor = (entry: RosterEntry) => {
+    if (entry.kind === 'guest') {
+      return () =>
+        openRemoveGuest({
+          id: entry.id,
+          addedBy: entry.addedBy,
+          photoUserId: entry.photoUserId,
+          photoURL: entry.photoURL,
+        });
+    }
+    if (!canManageMember(entry.id)) return null;
+    return () => setMemberToManage({ id: entry.id, name: entry.name, kind: entry.kind });
+  };
+
+  /**
+   * resolveRoster defaults a roleless player to 'Striker', and an anonymous guest never did
+   * onboarding, so a position would assert one they never chose. Only on the viewer's own entry:
+   * showing who has no account would expose others. Never nested in a button: the own entry is
+   * never tappable, since canManageMember excludes the viewer.
+   */
+  const isOwnGuestEntry = (entry: RosterEntry) =>
+    isGuest && entry.kind === 'player' && entry.id === profile.id;
+
+  const createAccountButton = (
+    <button
+      type="button"
+      onClick={onCreateAccount}
+      className="text-[9px] uppercase font-bold tracking-wider whitespace-nowrap text-[#d4f000] hover:underline py-1.5 -my-1.5"
+    >
+      {t('home.guestCta')}
+    </button>
+  );
 
   const runMemberAction = async (action: (uid: string) => Promise<void>) => {
     if (!memberToManage) return;
@@ -402,18 +437,8 @@ export function MatchDetailView({
                   <p className="text-xs font-bold text-center text-white max-w-[72px] truncate">
                     {entry.name}
                   </p>
-                  {/* resolveRoster defaults a roleless player to 'Striker', and an anonymous guest never did
-                      onboarding, so this line asserted a position they never chose. Only on the viewer's own
-                      chip: showing who has no account would expose others. Never nested in a button: the own
-                      chip is never tappable, since canManageMember excludes the viewer. */}
-                  {isGuest && onCreateAccount && entry.kind === 'player' && entry.id === profile.id ? (
-                    <button
-                      type="button"
-                      onClick={onCreateAccount}
-                      className="text-[9px] uppercase font-bold tracking-wider whitespace-nowrap text-[#d4f000] hover:underline py-1 -my-1"
-                    >
-                      {t('home.guestCta')}
-                    </button>
+                  {isOwnGuestEntry(entry) ? (
+                    createAccountButton
                   ) : (
                     <span
                       className={`text-[9px] uppercase font-bold tracking-wider ${
@@ -430,19 +455,7 @@ export function MatchDetailView({
                 </>
               );
 
-              const onTap =
-                entry.kind === 'guest'
-                  ? () =>
-                      openRemoveGuest({
-                        id: entry.id,
-                        addedBy: entry.addedBy,
-                        photoUserId: entry.photoUserId,
-                        photoURL: entry.photoURL,
-                      })
-                  : canManageMember(entry.id)
-                    ? () => setMemberToManage({ id: entry.id, name: entry.name, kind: 'player' })
-                    : null;
-
+              const onTap = tapHandlerFor(entry);
               if (onTap) {
                 return (
                   <button
@@ -511,14 +524,13 @@ export function MatchDetailView({
                 </>
               );
 
-              if (canManageMember(entry.id)) {
+              const onTap = tapHandlerFor(entry);
+              if (onTap) {
                 return (
                   <button
                     key={`waitlist-${entry.id}`}
                     type="button"
-                    onClick={() =>
-                      setMemberToManage({ id: entry.id, name: entry.name, kind: 'waitlist' })
-                    }
+                    onClick={onTap}
                     className="flex flex-col items-center min-w-[72px] shrink-0 active:scale-95 transition-transform"
                   >
                     {content}
@@ -603,33 +615,31 @@ export function MatchDetailView({
                         </p>
                       </div>
                     </div>
-                    <span
-                      className={`text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold ${
-                        entry.kind === 'player' && entry.role === 'Captain'
-                          ? 'bg-[#d4f000] text-[#001710]'
-                          : 'bg-[#0f2d24] text-gray-300'
-                      }`}
-                    >
-                      {entry.kind === 'guest'
-                        ? t('matches.guest')
-                        : t(`roles.short.${entry.role || 'Striker'}`)}
-                    </span>
+                    {isOwnGuestEntry(entry) ? (
+                      createAccountButton
+                    ) : (
+                      <span
+                        className={`text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold ${
+                          entry.kind === 'player' && entry.role === 'Captain'
+                            ? 'bg-[#d4f000] text-[#001710]'
+                            : 'bg-[#0f2d24] text-gray-300'
+                        }`}
+                      >
+                        {entry.kind === 'guest'
+                          ? t('matches.guest')
+                          : t(`roles.short.${entry.role || 'Striker'}`)}
+                      </span>
+                    )}
                   </>
                 );
 
-                if (entry.kind === 'guest') {
+                const onTap = tapHandlerFor(entry);
+                if (onTap) {
                   return (
                     <button
                       key={`expanded-${entry.kind}-${entry.id}-${idx}`}
                       type="button"
-                      onClick={() =>
-                        openRemoveGuest({
-                          id: entry.id,
-                          addedBy: entry.addedBy,
-                          photoUserId: entry.photoUserId,
-                          photoURL: entry.photoURL,
-                        })
-                      }
+                      onClick={onTap}
                       className="w-full flex items-center justify-between p-3 text-left hover:bg-[#0f2d24] transition-colors"
                     >
                       {row}
@@ -655,35 +665,57 @@ export function MatchDetailView({
                 </div>
               )}
 
-              {waitlist.map((entry) => (
-                <div
-                  key={`expanded-waitlist-${entry.id}`}
-                  className="flex items-center justify-between p-3 bg-amber-950/15"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
-                        alt={entry.name}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full border border-dashed border-amber-600/60 bg-[#020f0b] object-cover"
-                      />
-                      <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
-                        <Clock className="w-3 h-3" />
+              {waitlist.map((entry) => {
+                const row = (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <img
+                          src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
+                          alt={entry.name}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-full border border-dashed border-amber-600/60 bg-[#020f0b] object-cover"
+                        />
+                        <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
+                          <Clock className="w-3 h-3" />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-amber-50">{entry.name}</p>
+                        <p className="text-xs text-amber-200/60">
+                          {t('matches.privateEmail')}
+                        </p>
                       </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-sm text-amber-50">{entry.name}</p>
-                      <p className="text-xs text-amber-200/60">
-                        {t('matches.privateEmail')}
-                      </p>
-                    </div>
+                    <span className="text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold bg-amber-950/50 text-amber-300 border border-amber-700/40">
+                      {t('matches.onHold')}
+                    </span>
+                  </>
+                );
+
+                const onTap = tapHandlerFor(entry);
+                if (onTap) {
+                  return (
+                    <button
+                      key={`expanded-waitlist-${entry.id}`}
+                      type="button"
+                      onClick={onTap}
+                      className="w-full flex items-center justify-between p-3 text-left bg-amber-950/15 hover:bg-amber-950/30 transition-colors"
+                    >
+                      {row}
+                    </button>
+                  );
+                }
+
+                return (
+                  <div
+                    key={`expanded-waitlist-${entry.id}`}
+                    className="flex items-center justify-between p-3 bg-amber-950/15"
+                  >
+                    {row}
                   </div>
-                  <span className="text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold bg-amber-950/50 text-amber-300 border border-amber-700/40">
-                    {t('matches.onHold')}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
