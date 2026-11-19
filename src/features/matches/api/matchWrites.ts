@@ -240,6 +240,48 @@ export async function joinMatch(
 }
 
 /**
+ * A waitlisted link joiner's second chance, and the only thing in the app that repairs a drifted
+ * `occupiedCount`.
+ *
+ * Two unrelated rejections send a roster join to the waitlist, and the joiner can tell neither
+ * apart, because they cannot read the match: either it really is full (`withinCapacity`), or
+ * `matchPreviews.occupiedCount` no longer equals the roster the rules derive it from, so
+ * `increment(1)` cannot land on the required count. The second is not a transient race — while
+ * the counter is off by any amount, in either direction, EVERY link roster-join is denied and
+ * every joiner is quietly held, for good, until some write sends an absolute count. Only a member
+ * may read the match and the waitlist join just made this joiner one, so this is the first moment
+ * the truth is available to them.
+ *
+ * `buildJoinPatch` sends whole arrays and an absolute `occupiedCount`, so a success both moves
+ * them onto the roster (dropping the waitlist entry) and resyncs the preview for everyone after
+ * them. Best-effort by design: they are already safely on the waitlist, so a genuinely full match,
+ * a failed read or a lost race leaves them there rather than raising.
+ */
+async function claimOpenSpot(
+  matchId: string,
+  member: { id: string } & RosterMember,
+): Promise<boolean> {
+  try {
+    const snap = await getDoc(refs(matchId).matchRef);
+    if (!snap.exists()) return false;
+    // Roster fields are all this reads. `date` arrives as the raw Timestamp, not the Date the type
+    // promises, so nothing here may format it. `capacity` is defaulted the way `toMatch` and the
+    // rules both default it: a backfilled legacy doc can carry memberIds and no capacity, which
+    // would make `isMatchFull` always false and send a write the rules are certain to refuse.
+    const data = snap.data() as Partial<MatchData>;
+    const fresh = { ...data, id: matchId, capacity: data.capacity ?? 10 } as MatchData;
+    if (isMatchFull(fresh)) return false;
+    const { matchPatch, previewPatch } = buildJoinPatch(fresh, member, 'roster');
+    await commitRosterChange(matchId, matchPatch, previewPatch);
+    return true;
+  } catch (error) {
+    // Logged, never thrown: the waitlist place they already hold is the thing worth protecting.
+    console.error('link join: could not take the open spot', error);
+    return false;
+  }
+}
+
+/**
  * Joining from an invitation, by someone who cannot read the match. `joinMatch` rewrites whole
  * roster arrays from a `MatchData` the caller holds; a link recipient holds none, and a guessed
  * empty one would wipe the roster (the rules reject that, correctly). So this sends only what the
@@ -247,8 +289,10 @@ export async function joinMatch(
  * against the stored documents, never against a stale client copy.
  *
  * The preview is only bumped for a roster join; a waitlister does not change `occupiedCount`.
- * A roster join the rules refuse (the match filled meanwhile) retries once as a waitlist join.
- * Nothing in the rules caps the waitlist, so the joiner cannot learn it is full from here.
+ * A roster join the rules refuse retries once as a waitlist join, and then `claimOpenSpot` checks
+ * whether the match was actually full — the refusal alone does not prove it was, and a drifted
+ * counter refuses every roster join forever. Nothing in the rules caps the waitlist, so the joiner
+ * cannot learn it is full from here.
  *
  * Resolves to the list they actually landed on, so the caller can say so when a roster join was
  * downgraded to the waitlist, or to 'already-member' when the denial was a duplicate join (the same
@@ -283,10 +327,10 @@ export async function joinMatchByLink(
       if (await isAlreadyMember(matchId)) return 'already-member';
       try {
         await attempt('waitlist');
-        return 'waitlist';
       } catch (retryError) {
         handleFirestoreError(retryError, OperationType.UPDATE, `matches/${matchId}`);
       }
+      return (await claimOpenSpot(matchId, member)) ? 'roster' : 'waitlist';
     }
     handleFirestoreError(error, OperationType.UPDATE, `matches/${matchId}`);
   }
