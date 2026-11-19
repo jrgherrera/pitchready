@@ -210,6 +210,7 @@ export const es: Messages = {
     manageMemberTitle: 'Gestionar jugador',
     onRoster: 'En la plantilla',
     moveToHold: 'Pasar a espera',
+    moveToHoldBody: 'Sus invitados (+1) se quitarán del partido.',
     moveToRoster: 'Pasar a la plantilla',
     removeFromMatch: 'Quitar del partido',
     removeFromMatchBody: 'Pierde el acceso a este partido. Puede volver a unirse con el enlace del partido.',

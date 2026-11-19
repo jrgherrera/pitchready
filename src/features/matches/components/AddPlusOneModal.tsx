@@ -103,7 +103,7 @@ export function AddPlusOneModal({
           <button
             type="submit"
             disabled={busy || !trimmedName}
-            className="py-3.5 rounded-xl bg-[#d4f000] text-[#001710] font-anton uppercase tracking-wider text-sm hover:bg-[#b0c800] flex items-center justify-center gap-2 disabled:opacity-70"
+            className="py-3.5 rounded-xl bg-[#d4f000] text-[#001710] font-anton uppercase tracking-wider text-sm hover:bg-[#b0c800] flex items-center justify-center gap-2 disabled:opacity-40"
           >
             {busy ? (
               <Loader2 className="w-4 h-4 animate-spin" />

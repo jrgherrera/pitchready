@@ -93,6 +93,7 @@ export function MatchDetailView({
   const [addingGuest, setAddingGuest] = useState(false);
   const [guestToRemove, setGuestToRemove] = useState<{
     id: string;
+    name: string;
     addedBy: string;
     photoUserId: string;
     photoURL?: string;
@@ -167,6 +168,7 @@ export function MatchDetailView({
 
   const openRemoveGuest = (entry: {
     id: string;
+    name: string;
     addedBy: string;
     photoUserId: string;
     photoURL?: string;
@@ -198,6 +200,7 @@ export function MatchDetailView({
       return () =>
         openRemoveGuest({
           id: entry.id,
+          name: entry.name,
           addedBy: entry.addedBy,
           photoUserId: entry.photoUserId,
           photoURL: entry.photoURL,
@@ -855,6 +858,7 @@ export function MatchDetailView({
 
       {guestToRemove && removeHost && (
         <RemoveGuestModal
+          guestName={guestToRemove.name}
           hostId={removeHost.id}
           hostName={removeHost.name}
           hostPhotoURL={removeHost.photoURL}
@@ -886,6 +890,7 @@ export function MatchDetailView({
                 type="button"
                 onClick={() => setMemberToManage(null)}
                 disabled={managingMember}
+                aria-label={t('matches.cancel')}
                 className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-40"
               >
                 <X className="w-5 h-5" />
@@ -919,17 +924,25 @@ export function MatchDetailView({
 
             <div className="space-y-3">
               {memberToManage.kind === 'player' && !isWaitlistFull(match) && (
-                <button
-                  type="button"
-                  disabled={managingMember}
-                  onClick={() => {
-                    void runMemberAction((uid) => onMoveMember(match, uid, 'waitlist'));
-                  }}
-                  className="w-full py-3.5 rounded-xl border border-amber-700/60 bg-amber-950/40 text-amber-300 font-anton uppercase tracking-wider text-sm hover:bg-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Clock className="w-4 h-4" />
-                  {t('matches.moveToHold')}
-                </button>
+                <div>
+                  <button
+                    type="button"
+                    disabled={managingMember}
+                    onClick={() => {
+                      void runMemberAction((uid) => onMoveMember(match, uid, 'waitlist'));
+                    }}
+                    className="w-full py-3.5 rounded-xl border border-amber-700/60 bg-amber-950/40 text-amber-300 font-anton uppercase tracking-wider text-sm hover:bg-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {t('matches.moveToHold')}
+                  </button>
+                  {/* buildRosterMovePatch drops their +1s: a player on hold holds no spot for one. */}
+                  {(match.guests ?? []).some((g) => g.addedBy === memberToManage.id) && (
+                    <p className="text-xs text-gray-400 mt-2 text-center">
+                      {t('matches.moveToHoldBody')}
+                    </p>
+                  )}
+                </div>
               )}
               {memberToManage.kind === 'waitlist' && !isMatchFull(match) && (
                 <button

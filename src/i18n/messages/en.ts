@@ -209,6 +209,7 @@ const enCatalog = {
     manageMemberTitle: 'Manage player',
     onRoster: 'On the roster',
     moveToHold: 'Move to hold',
+    moveToHoldBody: 'Their +1s will be removed from the match.',
     moveToRoster: 'Move to roster',
     removeFromMatch: 'Remove from match',
     removeFromMatchBody: 'They lose access to this match. They can rejoin through the match link.',
