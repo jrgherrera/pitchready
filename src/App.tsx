@@ -255,6 +255,10 @@ export default function App() {
           onSaveTeams={saveTeams}
           onEdit={startEditMatch}
           onDelete={deleteMatch}
+          onCreateAccount={() => {
+            clearMessages();
+            setShowUpgrade(true);
+          }}
         />
 
         {editingMatchId && (

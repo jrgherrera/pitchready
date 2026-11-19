@@ -64,6 +64,7 @@ interface MatchDetailViewProps {
   onSaveTeams: (match: MatchData, teams: string[][]) => Promise<void>;
   onEdit: (match: MatchData) => void;
   onDelete: (matchId: string) => void;
+  onCreateAccount?: () => void;
 }
 
 export function MatchDetailView({
@@ -82,6 +83,7 @@ export function MatchDetailView({
   onSaveTeams,
   onEdit,
   onDelete,
+  onCreateAccount,
 }: MatchDetailViewProps) {
   const { t, locale } = useI18n();
   const [rosterExpanded, setRosterExpanded] = useState(false);
@@ -399,17 +401,31 @@ export function MatchDetailView({
                   <p className="text-xs font-bold text-center text-white max-w-[72px] truncate">
                     {entry.name}
                   </p>
-                  <span
-                    className={`text-[9px] uppercase font-bold tracking-wider ${
-                      entry.kind === 'player' && entry.role === 'Captain'
-                        ? 'text-[#d4f000]'
-                        : 'text-gray-400'
-                    }`}
-                  >
-                    {entry.kind === 'guest'
-                      ? t('matches.guest')
-                      : t(`roles.short.${entry.role || 'Striker'}`)}
-                  </span>
+                  {/* resolveRoster defaults a roleless player to 'Striker', and an anonymous guest never did
+                      onboarding, so this line asserted a position they never chose. Only on the viewer's own
+                      chip: showing who has no account would expose others. Never nested in a button: the own
+                      chip is never tappable, since canManageMember excludes the viewer. */}
+                  {isGuest && onCreateAccount && entry.kind === 'player' && entry.id === profile.id ? (
+                    <button
+                      type="button"
+                      onClick={onCreateAccount}
+                      className="text-[9px] uppercase font-bold tracking-wider whitespace-nowrap text-[#d4f000] hover:underline py-1 -my-1"
+                    >
+                      {t('home.guestCta')}
+                    </button>
+                  ) : (
+                    <span
+                      className={`text-[9px] uppercase font-bold tracking-wider ${
+                        entry.kind === 'player' && entry.role === 'Captain'
+                          ? 'text-[#d4f000]'
+                          : 'text-gray-400'
+                      }`}
+                    >
+                      {entry.kind === 'guest'
+                        ? t('matches.guest')
+                        : t(`roles.short.${entry.role || 'Striker'}`)}
+                    </span>
+                  )}
                 </>
               );
 
