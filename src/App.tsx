@@ -95,6 +95,8 @@ export default function App() {
     joinOrLeaveMatch,
     addGuestPlusOne,
     removeGuestPlusOne,
+    removeMember,
+    moveMember,
     saveTeams,
   } = useMatchActions(
     profile,
@@ -103,6 +105,7 @@ export default function App() {
       setActiveMatchId(matchId);
     },
     () => setActiveMatchId(null),
+    superAdminMode,
   );
 
   // A link to a match the visitor is not in: show the invitation instead of a login wall.
@@ -247,9 +250,15 @@ export default function App() {
           onJoinLeave={joinOrLeaveMatch}
           onAddGuest={addGuestPlusOne}
           onRemoveGuest={removeGuestPlusOne}
+          onRemoveMember={removeMember}
+          onMoveMember={moveMember}
           onSaveTeams={saveTeams}
           onEdit={startEditMatch}
           onDelete={deleteMatch}
+          onCreateAccount={() => {
+            clearMessages();
+            setShowUpgrade(true);
+          }}
         />
 
         {editingMatchId && (

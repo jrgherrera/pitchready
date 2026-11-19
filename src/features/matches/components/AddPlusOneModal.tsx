@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Loader2, UserPlus, X } from 'lucide-react';
 import { useT } from '../../../i18n';
+import { authInputPlainClass } from '../../auth/components/AuthLayout';
 import { getAvatarUrl } from '../../../utils/avatars';
 
 interface AddPlusOneModalProps {
@@ -7,7 +9,7 @@ interface AddPlusOneModalProps {
   hostId: string;
   hostPhotoURL?: string;
   busy?: boolean;
-  onConfirm: () => void;
+  onConfirm: (name: string) => void;
   onClose: () => void;
 }
 
@@ -20,11 +22,19 @@ export function AddPlusOneModal({
   onClose,
 }: AddPlusOneModalProps) {
   const t = useT();
+  const [name, setName] = useState('');
+  const trimmedName = name.trim();
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/80 flex items-end justify-center">
       <div className="absolute inset-0" onClick={busy ? undefined : onClose} />
-      <div className="w-full max-w-md bg-[#0a1c17] border-t border-[#1f453a] rounded-t-2xl z-10 px-6 pb-8 pt-4 space-y-5 animate-slide-up">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (trimmedName && !busy) onConfirm(trimmedName);
+        }}
+        className="w-full max-w-md bg-[#0a1c17] border-t border-[#1f453a] rounded-t-2xl z-10 px-6 pb-8 pt-4 space-y-5 animate-slide-up"
+      >
         <div className="flex justify-center mb-1">
           <div className="w-12 h-1.5 bg-[#1f453a] rounded-full" />
         </div>
@@ -58,11 +68,28 @@ export function AddPlusOneModal({
               +1
             </div>
           </div>
-          <p className="font-bold text-white text-base">{t('matches.guest')}</p>
+          <p className="font-bold text-white text-base">{trimmedName || t('matches.guest')}</p>
           <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-0.5">
             {t('matches.plusOneFor', { name: hostName })}
           </p>
         </div>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+            {t('matches.addPlusOneNameLabel')}
+          </span>
+          <input
+            className={authInputPlainClass}
+            required
+            type="text"
+            maxLength={60}
+            autoComplete="off"
+            placeholder={t('matches.addPlusOneNamePlaceholder')}
+            value={name}
+            disabled={busy}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
 
         <div className="grid grid-cols-2 gap-3">
           <button
@@ -74,10 +101,9 @@ export function AddPlusOneModal({
             {t('matches.cancel')}
           </button>
           <button
-            type="button"
-            disabled={busy}
-            onClick={onConfirm}
-            className="py-3.5 rounded-xl bg-[#d4f000] text-[#001710] font-anton uppercase tracking-wider text-sm hover:bg-[#b0c800] flex items-center justify-center gap-2 disabled:opacity-70"
+            type="submit"
+            disabled={busy || !trimmedName}
+            className="py-3.5 rounded-xl bg-[#d4f000] text-[#001710] font-anton uppercase tracking-wider text-sm hover:bg-[#b0c800] flex items-center justify-center gap-2 disabled:opacity-40"
           >
             {busy ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -87,7 +113,7 @@ export function AddPlusOneModal({
             {t('matches.addPlusOneConfirm')}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

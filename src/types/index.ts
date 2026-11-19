@@ -30,6 +30,8 @@ export interface MatchGuest {
   /** User who added this +1 */
   addedBy: string;
   createdAt: string;
+  /** Typed by whoever added the +1. Guests added before names existed have none. */
+  name?: string;
 }
 
 export interface MatchData {

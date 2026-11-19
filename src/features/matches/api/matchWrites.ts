@@ -24,6 +24,7 @@ import {
   buildGuestListPatch,
   buildJoinPatch,
   buildLeavePatch,
+  buildRosterMovePatch,
   type MatchRosterPatch,
   type PreviewCountPatch,
 } from './matchPayloads';
@@ -346,9 +347,37 @@ export async function leaveMatch(match: MatchData, uid: string): Promise<void> {
   }
 }
 
+/** The owner taking someone off the match. Nobody is promoted: the freed spot stays open. */
+export async function removeFromMatch(match: MatchData, uid: string): Promise<void> {
+  const { matchPatch, previewPatch } = buildLeavePatch(match, uid, { promote: false });
+  try {
+    await commitRosterChange(match.id, matchPatch, previewPatch);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+  }
+}
+
+/** The owner moving a member between the roster and the waitlist. Capacity is the caller's check. */
+export async function moveRosterMember(
+  match: MatchData,
+  uid: string,
+  to: 'roster' | 'waitlist',
+): Promise<void> {
+  const { matchPatch, previewPatch } = buildRosterMovePatch(match, uid, to);
+  try {
+    await commitRosterChange(match.id, matchPatch, previewPatch);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `matches/${match.id}`);
+  }
+}
+
 /** The whole +1 list, after an add or a removal. */
-export async function setGuestList(match: MatchData, guests: MatchGuest[]): Promise<void> {
-  const { matchPatch, previewPatch } = buildGuestListPatch(match, guests);
+export async function setGuestList(
+  match: MatchData,
+  guests: MatchGuest[],
+  options?: { promote?: boolean },
+): Promise<void> {
+  const { matchPatch, previewPatch } = buildGuestListPatch(match, guests, options);
   try {
     await commitRosterChange(match.id, matchPatch, previewPatch);
   } catch (error) {

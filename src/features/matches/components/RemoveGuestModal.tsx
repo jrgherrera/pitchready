@@ -3,6 +3,8 @@ import { useT } from '../../../i18n';
 import { getAvatarUrl } from '../../../utils/avatars';
 
 interface RemoveGuestModalProps {
+  /** Resolved by resolveRoster, so an unnamed +1 already reads "Guest". */
+  guestName: string;
   hostName: string;
   hostId: string;
   hostPhotoURL?: string;
@@ -12,6 +14,7 @@ interface RemoveGuestModalProps {
 }
 
 export function RemoveGuestModal({
+  guestName,
   hostName,
   hostId,
   hostPhotoURL,
@@ -58,7 +61,7 @@ export function RemoveGuestModal({
               +1
             </div>
           </div>
-          <p className="font-bold text-white text-base">{t('matches.guest')}</p>
+          <p className="font-bold text-white text-base">{guestName}</p>
           <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-0.5">
             {t('matches.plusOneFor', { name: hostName })}
           </p>

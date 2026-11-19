@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowUp,
   Award,
   Check,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   Share2,
   Trash2,
   UserPlus,
+  X,
   Zap,
 } from 'lucide-react';
 import { useI18n } from '../../../i18n';
@@ -28,13 +30,16 @@ import {
   openMapsDirections,
 } from '../../../utils/location';
 import {
+  atGuestCap,
   getCapacityPercent,
   getOccupiedCount,
   getSpotsLeft,
   getWaitlistSpotsLeft,
   isMatchFull,
+  isWaitlistFull,
   resolveRoster,
   resolveWaitlist,
+  type RosterEntry,
   shareMatchLink,
 } from '../../../utils/matches';
 import { MATCH_HERO_IMAGE } from '../constants';
@@ -54,11 +59,14 @@ interface MatchDetailViewProps {
   canManage: boolean;
   onBack: () => void;
   onJoinLeave: (match: MatchData) => void;
-  onAddGuest: (match: MatchData) => Promise<void>;
+  onAddGuest: (match: MatchData, name: string) => Promise<void>;
   onRemoveGuest: (match: MatchData, guestId: string) => Promise<void>;
+  onRemoveMember: (match: MatchData, uid: string) => Promise<void>;
+  onMoveMember: (match: MatchData, uid: string, to: 'roster' | 'waitlist') => Promise<void>;
   onSaveTeams: (match: MatchData, teams: string[][]) => Promise<void>;
   onEdit: (match: MatchData) => void;
   onDelete: (matchId: string) => void;
+  onCreateAccount: () => void;
 }
 
 export function MatchDetailView({
@@ -72,9 +80,12 @@ export function MatchDetailView({
   onJoinLeave,
   onAddGuest,
   onRemoveGuest,
+  onRemoveMember,
+  onMoveMember,
   onSaveTeams,
   onEdit,
   onDelete,
+  onCreateAccount,
 }: MatchDetailViewProps) {
   const { t, locale } = useI18n();
   const [rosterExpanded, setRosterExpanded] = useState(false);
@@ -82,11 +93,18 @@ export function MatchDetailView({
   const [addingGuest, setAddingGuest] = useState(false);
   const [guestToRemove, setGuestToRemove] = useState<{
     id: string;
+    name: string;
     addedBy: string;
     photoUserId: string;
     photoURL?: string;
   } | null>(null);
   const [removingGuest, setRemovingGuest] = useState(false);
+  const [memberToManage, setMemberToManage] = useState<{
+    id: string;
+    name: string;
+    kind: 'player' | 'waitlist';
+  } | null>(null);
+  const [managingMember, setManagingMember] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deletingMatch, setDeletingMatch] = useState(false);
 
@@ -124,7 +142,7 @@ export function MatchDetailView({
       alert(t('matches.signUpToAddGuest'));
       return;
     }
-    if ((match.guests ?? []).some((g) => g.addedBy === profile.id)) {
+    if (atGuestCap(match, profile.id, canManage)) {
       alert(t('matches.oneGuestOnly'));
       return;
     }
@@ -135,10 +153,10 @@ export function MatchDetailView({
     setShowPlusOneModal(true);
   };
 
-  const confirmPlusOne = async () => {
+  const confirmPlusOne = async (name: string) => {
     setAddingGuest(true);
     try {
-      await onAddGuest(match);
+      await onAddGuest(match, name);
       setShowPlusOneModal(false);
     } finally {
       setAddingGuest(false);
@@ -150,6 +168,7 @@ export function MatchDetailView({
 
   const openRemoveGuest = (entry: {
     id: string;
+    name: string;
     addedBy: string;
     photoUserId: string;
     photoURL?: string;
@@ -169,6 +188,55 @@ export function MatchDetailView({
       setGuestToRemove(null);
     } finally {
       setRemovingGuest(false);
+    }
+  };
+
+  /** The owner can manage anyone but themselves; useMatchActions re-checks both. */
+  const canManageMember = (uid: string) => canManage && uid !== profile.id;
+
+  /** What tapping an entry does, or null if nothing. One rule for the chips and the full squad. */
+  const tapHandlerFor = (entry: RosterEntry) => {
+    if (entry.kind === 'guest') {
+      return () =>
+        openRemoveGuest({
+          id: entry.id,
+          name: entry.name,
+          addedBy: entry.addedBy,
+          photoUserId: entry.photoUserId,
+          photoURL: entry.photoURL,
+        });
+    }
+    if (!canManageMember(entry.id)) return null;
+    return () => setMemberToManage({ id: entry.id, name: entry.name, kind: entry.kind });
+  };
+
+  /**
+   * resolveRoster defaults a roleless player to 'Striker', and an anonymous guest never did
+   * onboarding, so a position would assert one they never chose. Only on the viewer's own entry:
+   * showing who has no account would expose others. Never nested in a button: the own entry is
+   * never tappable, since canManageMember excludes the viewer.
+   */
+  const isOwnGuestEntry = (entry: RosterEntry) =>
+    isGuest && entry.kind === 'player' && entry.id === profile.id;
+
+  const createAccountButton = (
+    <button
+      type="button"
+      onClick={onCreateAccount}
+      className="text-[9px] uppercase font-bold tracking-wider whitespace-nowrap text-[#d4f000] hover:underline py-1.5 -my-1.5"
+    >
+      {t('home.guestCta')}
+    </button>
+  );
+
+  const runMemberAction = async (action: (uid: string) => Promise<void>) => {
+    if (!memberToManage) return;
+    setManagingMember(true);
+    try {
+      await action(memberToManage.id);
+      setMemberToManage(null);
+    } finally {
+      setManagingMember(false);
     }
   };
 
@@ -372,33 +440,31 @@ export function MatchDetailView({
                   <p className="text-xs font-bold text-center text-white max-w-[72px] truncate">
                     {entry.name}
                   </p>
-                  <span
-                    className={`text-[9px] uppercase font-bold tracking-wider ${
-                      entry.kind === 'player' && entry.role === 'Captain'
-                        ? 'text-[#d4f000]'
-                        : 'text-gray-400'
-                    }`}
-                  >
-                    {entry.kind === 'guest'
-                      ? t('matches.guest')
-                      : t(`roles.short.${entry.role || 'Striker'}`)}
-                  </span>
+                  {isOwnGuestEntry(entry) ? (
+                    createAccountButton
+                  ) : (
+                    <span
+                      className={`text-[9px] uppercase font-bold tracking-wider ${
+                        entry.kind === 'player' && entry.role === 'Captain'
+                          ? 'text-[#d4f000]'
+                          : 'text-gray-400'
+                      }`}
+                    >
+                      {entry.kind === 'guest'
+                        ? t('matches.guest')
+                        : t(`roles.short.${entry.role || 'Striker'}`)}
+                    </span>
+                  )}
                 </>
               );
 
-              if (entry.kind === 'guest') {
+              const onTap = tapHandlerFor(entry);
+              if (onTap) {
                 return (
                   <button
                     key={`${entry.kind}-${entry.id}-${idx}`}
                     type="button"
-                    onClick={() =>
-                      openRemoveGuest({
-                        id: entry.id,
-                        addedBy: entry.addedBy,
-                        photoUserId: entry.photoUserId,
-                        photoURL: entry.photoURL,
-                      })
-                    }
+                    onClick={onTap}
                     className="flex flex-col items-center min-w-[72px] shrink-0 active:scale-95 transition-transform"
                   >
                     {content}
@@ -438,30 +504,52 @@ export function MatchDetailView({
               <div className="w-px h-16 bg-amber-700/50" aria-hidden />
             </div>
 
-            {waitlist.map((entry) => (
-              <div
-                key={`waitlist-${entry.id}`}
-                className="flex flex-col items-center min-w-[72px] shrink-0"
-              >
-                <div className="w-14 h-14 rounded-full border-2 border-dashed border-amber-500/70 p-0.5 mb-1 bg-amber-950/40 relative">
-                  <img
-                    className="w-full h-full rounded-full object-cover opacity-90"
-                    src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
-                    alt={entry.name}
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
-                    <Clock className="w-3.5 h-3.5" />
+            {waitlist.map((entry) => {
+              const content = (
+                <>
+                  <div className="w-14 h-14 rounded-full border-2 border-dashed border-amber-500/70 p-0.5 mb-1 bg-amber-950/40 relative">
+                    <img
+                      className="w-full h-full rounded-full object-cover opacity-90"
+                      src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
+                      alt={entry.name}
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
+                      <Clock className="w-3.5 h-3.5" />
+                    </div>
                   </div>
+                  <p className="text-xs font-bold text-center text-amber-100 max-w-[72px] truncate">
+                    {entry.name}
+                  </p>
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-amber-400">
+                    {t('matches.onHold')}
+                  </span>
+                </>
+              );
+
+              const onTap = tapHandlerFor(entry);
+              if (onTap) {
+                return (
+                  <button
+                    key={`waitlist-${entry.id}`}
+                    type="button"
+                    onClick={onTap}
+                    className="flex flex-col items-center min-w-[72px] shrink-0 active:scale-95 transition-transform"
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
+              return (
+                <div
+                  key={`waitlist-${entry.id}`}
+                  className="flex flex-col items-center min-w-[72px] shrink-0"
+                >
+                  {content}
                 </div>
-                <p className="text-xs font-bold text-center text-amber-100 max-w-[72px] truncate">
-                  {entry.name}
-                </p>
-                <span className="text-[9px] uppercase font-bold tracking-wider text-amber-400">
-                  {t('matches.onHold')}
-                </span>
-              </div>
-            ))}
+              );
+            })}
 
             {Array.from({ length: Math.max(0, waitlistSpotsLeft) }).map((_, i) => (
               <button
@@ -530,33 +618,31 @@ export function MatchDetailView({
                         </p>
                       </div>
                     </div>
-                    <span
-                      className={`text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold ${
-                        entry.kind === 'player' && entry.role === 'Captain'
-                          ? 'bg-[#d4f000] text-[#001710]'
-                          : 'bg-[#0f2d24] text-gray-300'
-                      }`}
-                    >
-                      {entry.kind === 'guest'
-                        ? t('matches.guest')
-                        : t(`roles.short.${entry.role || 'Striker'}`)}
-                    </span>
+                    {isOwnGuestEntry(entry) ? (
+                      createAccountButton
+                    ) : (
+                      <span
+                        className={`text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold ${
+                          entry.kind === 'player' && entry.role === 'Captain'
+                            ? 'bg-[#d4f000] text-[#001710]'
+                            : 'bg-[#0f2d24] text-gray-300'
+                        }`}
+                      >
+                        {entry.kind === 'guest'
+                          ? t('matches.guest')
+                          : t(`roles.short.${entry.role || 'Striker'}`)}
+                      </span>
+                    )}
                   </>
                 );
 
-                if (entry.kind === 'guest') {
+                const onTap = tapHandlerFor(entry);
+                if (onTap) {
                   return (
                     <button
                       key={`expanded-${entry.kind}-${entry.id}-${idx}`}
                       type="button"
-                      onClick={() =>
-                        openRemoveGuest({
-                          id: entry.id,
-                          addedBy: entry.addedBy,
-                          photoUserId: entry.photoUserId,
-                          photoURL: entry.photoURL,
-                        })
-                      }
+                      onClick={onTap}
                       className="w-full flex items-center justify-between p-3 text-left hover:bg-[#0f2d24] transition-colors"
                     >
                       {row}
@@ -582,35 +668,57 @@ export function MatchDetailView({
                 </div>
               )}
 
-              {waitlist.map((entry) => (
-                <div
-                  key={`expanded-waitlist-${entry.id}`}
-                  className="flex items-center justify-between p-3 bg-amber-950/15"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
-                        alt={entry.name}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full border border-dashed border-amber-600/60 bg-[#020f0b] object-cover"
-                      />
-                      <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
-                        <Clock className="w-3 h-3" />
+              {waitlist.map((entry) => {
+                const row = (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <img
+                          src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
+                          alt={entry.name}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-full border border-dashed border-amber-600/60 bg-[#020f0b] object-cover"
+                        />
+                        <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
+                          <Clock className="w-3 h-3" />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-amber-50">{entry.name}</p>
+                        <p className="text-xs text-amber-200/60">
+                          {t('matches.privateEmail')}
+                        </p>
                       </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-sm text-amber-50">{entry.name}</p>
-                      <p className="text-xs text-amber-200/60">
-                        {t('matches.privateEmail')}
-                      </p>
-                    </div>
+                    <span className="text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold bg-amber-950/50 text-amber-300 border border-amber-700/40">
+                      {t('matches.onHold')}
+                    </span>
+                  </>
+                );
+
+                const onTap = tapHandlerFor(entry);
+                if (onTap) {
+                  return (
+                    <button
+                      key={`expanded-waitlist-${entry.id}`}
+                      type="button"
+                      onClick={onTap}
+                      className="w-full flex items-center justify-between p-3 text-left bg-amber-950/15 hover:bg-amber-950/30 transition-colors"
+                    >
+                      {row}
+                    </button>
+                  );
+                }
+
+                return (
+                  <div
+                    key={`expanded-waitlist-${entry.id}`}
+                    className="flex items-center justify-between p-3 bg-amber-950/15"
+                  >
+                    {row}
                   </div>
-                  <span className="text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold bg-amber-950/50 text-amber-300 border border-amber-700/40">
-                    {t('matches.onHold')}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -731,8 +839,8 @@ export function MatchDetailView({
           hostPhotoURL={profile.photoURL}
           busy={addingGuest}
           onClose={() => setShowPlusOneModal(false)}
-          onConfirm={() => {
-            void confirmPlusOne();
+          onConfirm={(name) => {
+            void confirmPlusOne(name);
           }}
         />
       )}
@@ -750,6 +858,7 @@ export function MatchDetailView({
 
       {guestToRemove && removeHost && (
         <RemoveGuestModal
+          guestName={guestToRemove.name}
           hostId={removeHost.id}
           hostName={removeHost.name}
           hostPhotoURL={removeHost.photoURL}
@@ -759,6 +868,122 @@ export function MatchDetailView({
             void confirmRemoveGuest();
           }}
         />
+      )}
+
+      {/* Same bottom-sheet shell as RemoveGuestModal; kept inline since it only lives here. */}
+      {memberToManage && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-end justify-center">
+          <div
+            className="absolute inset-0"
+            onClick={managingMember ? undefined : () => setMemberToManage(null)}
+          />
+          <div className="w-full max-w-md bg-[#0a1c17] border-t border-[#1f453a] rounded-t-2xl z-10 px-6 pb-8 pt-4 space-y-5 animate-slide-up">
+            <div className="flex justify-center mb-1">
+              <div className="w-12 h-1.5 bg-[#1f453a] rounded-full" />
+            </div>
+
+            <div className="flex justify-between items-start">
+              <h2 className="font-anton text-2xl text-[#d4f000] uppercase tracking-wider">
+                {t('matches.manageMemberTitle')}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMemberToManage(null)}
+                disabled={managingMember}
+                aria-label={t('matches.cancel')}
+                className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center py-2">
+              <div
+                className={`w-20 h-20 rounded-full border-2 p-0.5 mb-3 ${
+                  memberToManage.kind === 'waitlist'
+                    ? 'border-dashed border-amber-500/70 bg-amber-950/40'
+                    : 'border-[#1f453a] bg-[#0a1c17]'
+                }`}
+              >
+                <img
+                  src={getAvatarUrl(memberToManage.id, match.roster?.[memberToManage.id]?.photoURL)}
+                  alt={memberToManage.name}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full rounded-full object-cover"
+                />
+              </div>
+              <p className="font-bold text-white text-base">{memberToManage.name}</p>
+              <p
+                className={`text-[10px] uppercase tracking-wider font-bold mt-0.5 ${
+                  memberToManage.kind === 'waitlist' ? 'text-amber-400' : 'text-gray-400'
+                }`}
+              >
+                {memberToManage.kind === 'waitlist' ? t('matches.onHold') : t('matches.onRoster')}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {memberToManage.kind === 'player' && !isWaitlistFull(match) && (
+                <div>
+                  <button
+                    type="button"
+                    disabled={managingMember}
+                    onClick={() => {
+                      void runMemberAction((uid) => onMoveMember(match, uid, 'waitlist'));
+                    }}
+                    className="w-full py-3.5 rounded-xl border border-amber-700/60 bg-amber-950/40 text-amber-300 font-anton uppercase tracking-wider text-sm hover:bg-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {t('matches.moveToHold')}
+                  </button>
+                  {/* buildRosterMovePatch drops their +1s: a player on hold holds no spot for one. */}
+                  {(match.guests ?? []).some((g) => g.addedBy === memberToManage.id) && (
+                    <p className="text-xs text-gray-400 mt-2 text-center">
+                      {t('matches.moveToHoldBody')}
+                    </p>
+                  )}
+                </div>
+              )}
+              {memberToManage.kind === 'waitlist' && !isMatchFull(match) && (
+                <button
+                  type="button"
+                  disabled={managingMember}
+                  onClick={() => {
+                    void runMemberAction((uid) => onMoveMember(match, uid, 'roster'));
+                  }}
+                  className="w-full py-3.5 rounded-xl border border-[#1f453a] bg-[#0f2d24] text-[#d4f000] font-anton uppercase tracking-wider text-sm hover:bg-[#1f453a] flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                  {t('matches.moveToRoster')}
+                </button>
+              )}
+              <div>
+                <button
+                  type="button"
+                  disabled={managingMember}
+                  onClick={() => {
+                    void runMemberAction((uid) => onRemoveMember(match, uid));
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-red-950/50 text-red-400 border border-red-900/60 font-anton uppercase tracking-wider text-sm hover:bg-red-900/50 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {t('matches.removeFromMatch')}
+                </button>
+                <p className="text-xs text-gray-400 mt-2 text-center">
+                  {t('matches.removeFromMatchBody')}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={managingMember}
+                onClick={() => setMemberToManage(null)}
+                className="w-full py-3.5 rounded-xl border border-[#1f453a] text-gray-300 font-anton uppercase tracking-wider text-sm hover:bg-[#0f2d24] disabled:opacity-50"
+              >
+                {t('matches.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

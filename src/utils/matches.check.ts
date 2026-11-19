@@ -2,7 +2,13 @@
 import assert from 'node:assert/strict';
 import { t } from '../i18n';
 import type { MatchData } from '../types';
-import { computeMemberIds, resolveRoster, rosterEntryFor } from './matches';
+import {
+  atGuestCap,
+  computeMemberIds,
+  promoteFromWaitlist,
+  resolveRoster,
+  rosterEntryFor,
+} from './matches';
 
 // Creator, roster and waitlist in one array, creator first, no duplicates.
 assert.deepEqual(
@@ -54,6 +60,53 @@ assert.deepEqual(
   assert.equal(entries[0].name, 'Jorge');
   assert.equal(entries[0].role, 'Keeper');
   assert.equal(entries[1].name, t('matches.guestPlayer'), 'a member with no roster entry still renders');
+}
+
+// A named +1 shows its name; one written before this change falls back to the generic label.
+{
+  const match = {
+    id: 'm1',
+    roster: { u1: { name: 'Jorge' } },
+    joinedPlayerIds: ['u1'],
+    guests: [
+      { id: 'g1', addedBy: 'u1', createdAt: 'x', name: 'Primo Juan' },
+      { id: 'g2', addedBy: 'u1', createdAt: 'x' },
+    ],
+  } as unknown as MatchData;
+  const guests = resolveRoster(match).filter((e) => e.kind === 'guest');
+  assert.equal(guests[0].name, 'Primo Juan');
+  assert.equal(guests[1].name, t('matches.guest'), 'no name, no undefined');
+}
+
+// The one-+1-per-person cap: reached once you brought one, and never applied to the owner.
+{
+  const match = {
+    guests: [{ id: 'g1', addedBy: 'u2', createdAt: 'x' }],
+  } as unknown as MatchData;
+  assert.equal(atGuestCap(match, 'u2', false), true, 'a non-owner who brought a +1 is capped');
+  assert.equal(atGuestCap(match, 'u2', true), false, 'the owner is exempt');
+  assert.equal(atGuestCap(match, 'u3', false), false, 'a non-owner with no +1 can bring one');
+}
+
+// Promotion takes at most `maxPromotions` people, FIFO, and never past capacity.
+{
+  const joined = ['a', 'b', 'c'];
+  const waiting = ['x', 'y', 'z'];
+  assert.deepEqual(
+    promoteFromWaitlist(joined, waiting, [], 6, 0),
+    { joinedPlayerIds: ['a', 'b', 'c'], waitlistPlayerIds: ['x', 'y', 'z'] },
+    'zero freed spots promotes nobody',
+  );
+  assert.deepEqual(
+    promoteFromWaitlist(joined, waiting, [], 6, 1),
+    { joinedPlayerIds: ['a', 'b', 'c', 'x'], waitlistPlayerIds: ['y', 'z'] },
+    'three free spots, one freed: only the first in line',
+  );
+  assert.deepEqual(
+    promoteFromWaitlist(joined, waiting, [], 4, 5),
+    { joinedPlayerIds: ['a', 'b', 'c', 'x'], waitlistPlayerIds: ['y', 'z'] },
+    'capacity still bounds it',
+  );
 }
 
 console.log('matches.check: ok');

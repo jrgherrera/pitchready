@@ -4,6 +4,8 @@ import { useT } from '../../../i18n';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import type { CreateMatchForm, MatchData, SignUpStatus, UserProfile } from '../../../types';
 import {
+  atGuestCap,
+  canManageMatch,
   getOccupiedCount,
   isMatchFull,
   isWaitlistFull,
@@ -15,6 +17,8 @@ import {
   deleteMatchEverywhere,
   joinMatch,
   leaveMatch,
+  moveRosterMember,
+  removeFromMatch,
   setGuestList,
   updateMatchDetails,
 } from '../api/matchWrites';
@@ -29,6 +33,7 @@ export function useMatchActions(
   profile: UserProfile | null,
   onMatchCreated?: (matchId: string) => void,
   onMatchDeleted?: () => void,
+  superAdminMode = false,
 ) {
   const t = useT();
   const [creatingMatch, setCreatingMatch] = useState(false);
@@ -140,7 +145,7 @@ export function useMatchActions(
     }
   };
 
-  const addGuestPlusOne = async (match: MatchData) => {
+  const addGuestPlusOne = async (match: MatchData, name: string) => {
     if (!profile) return;
 
     if (!match.joinedPlayerIds.includes(profile.id)) {
@@ -148,12 +153,15 @@ export function useMatchActions(
       return;
     }
 
+    // Capacity is the only ceiling the owner or a super admin faces: isMatchOwner() in
+    // firestore.rules (isSuperAdmin() || creatorId == auth.uid) bypasses withinCapacity(), so the
+    // rules accept an over-capacity roster from either and this check is the only thing stopping one.
     if (getOccupiedCount(match) >= match.capacity) {
       alert(t('matches.alreadyFull'));
       return;
     }
 
-    if ((match.guests ?? []).some((g) => g.addedBy === profile.id)) {
+    if (atGuestCap(match, profile.id, canManageMatch(match, profile, superAdminMode))) {
       alert(t('matches.oneGuestOnly'));
       return;
     }
@@ -162,9 +170,16 @@ export function useMatchActions(
       id: `guest_${profile.id}_${Date.now()}`,
       addedBy: profile.id,
       createdAt: new Date().toISOString(),
+      name,
     };
 
-    await setGuestList(match, [...(match.guests ?? []), guest]);
+    try {
+      await setGuestList(match, [...(match.guests ?? []), guest]);
+    } catch {
+      // setGuestList already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
+      alert(t('matches.joinFailed'));
+    }
   };
 
   const removeGuestPlusOne = async (match: MatchData, guestId: string) => {
@@ -182,10 +197,67 @@ export function useMatchActions(
       return;
     }
 
-    await setGuestList(
-      match,
-      (match.guests ?? []).filter((g) => g.id !== guestId),
-    );
+    try {
+      // The owner removing a +1 — theirs or anyone's — promotes nobody: owner actions never pull
+      // a held waitlister in. A member removing their own +1 hands that one spot to the next in line.
+      await setGuestList(
+        match,
+        (match.guests ?? []).filter((g) => g.id !== guestId),
+        { promote: !canManageMatch(match, profile, superAdminMode) },
+      );
+    } catch {
+      // setGuestList already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
+      alert(t('matches.joinFailed'));
+    }
+  };
+
+  /**
+   * The owner's roster actions. The guard lives here and not only in the UI, which can render from
+   * a stale snapshot. Never the caller's own uid (the owner already has LEAVE MATCH), and only a
+   * uid that is on one of the lists: the move builder would otherwise append a stranger.
+   * Membership is read from the two id arrays, not `memberIds`: that one is optional on the type
+   * and keeps the creator after they leave the roster, so it is the wrong oracle. Do not simplify.
+   */
+  const canActOnMember = (match: MatchData, uid: string) =>
+    !!profile &&
+    canManageMatch(match, profile, superAdminMode) &&
+    uid !== profile.id &&
+    (match.joinedPlayerIds.includes(uid) || (match.waitlistPlayerIds ?? []).includes(uid));
+
+  const removeMember = async (match: MatchData, uid: string) => {
+    if (!canActOnMember(match, uid)) return;
+    try {
+      await removeFromMatch(match, uid);
+    } catch {
+      // removeFromMatch already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
+      alert(t('matches.joinFailed'));
+    }
+  };
+
+  const moveMember = async (match: MatchData, uid: string, to: 'roster' | 'waitlist') => {
+    if (!canActOnMember(match, uid)) return;
+    // Already on the target list: nothing to do, and it must precede the capacity checks or a
+    // roster-to-roster no-op on a full match would alert "already full".
+    const onRoster = match.joinedPlayerIds.includes(uid);
+    if ((to === 'roster') === onRoster) return;
+    // The rules let the owner past withinCapacity(), so this client check is the only ceiling.
+    if (to === 'roster' && isMatchFull(match)) {
+      alert(t('matches.alreadyFull'));
+      return;
+    }
+    if (to === 'waitlist' && isWaitlistFull(match)) {
+      alert(t('matches.waitlistFull'));
+      return;
+    }
+    try {
+      await moveRosterMember(match, uid, to);
+    } catch {
+      // moveRosterMember already logged the Firestore error; this is the user's half. Callers
+      // fire-and-forget this promise, so rethrowing would only reach the console.
+      alert(t('matches.joinFailed'));
+    }
   };
 
   /** Host-only — firestore.rules rejects this write for anyone but the match owner. */
@@ -216,5 +288,7 @@ export function useMatchActions(
     addGuestPlusOne,
     removeGuestPlusOne,
     saveTeams,
+    removeMember,
+    moveMember,
   };
 }

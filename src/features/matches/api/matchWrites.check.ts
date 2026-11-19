@@ -13,6 +13,7 @@ import {
   buildGuestListPatch,
   buildJoinPatch,
   buildLeavePatch,
+  buildRosterMovePatch,
 } from './matchPayloads';
 import type { CreateMatchForm, MatchData, UserProfile } from '../../../types';
 
@@ -24,6 +25,13 @@ const PRIVATE_FIELDS = [
   'guests',
   'teams',
 ];
+
+/** matchPreviews/{id} is public: no roster, guests or names may ever reach it. */
+function assertPublicOnly(previewPatch: object) {
+  for (const leaked of PRIVATE_FIELDS) {
+    assert.ok(!(leaked in previewPatch), `${leaked} must not reach the preview`);
+  }
+}
 
 const match: MatchData = {
   id: 'm1',
@@ -61,9 +69,7 @@ const fullMatchWithWaitlist: MatchData = {
     'writes only its own roster key, by dotted path',
   );
   assert.deepEqual(matchPatch['roster.u9'], { name: 'Ana' }, 'no undefined optionals');
-  for (const leaked of PRIVATE_FIELDS) {
-    assert.ok(!(leaked in previewPatch), `${leaked} must not reach the preview`);
-  }
+  assertPublicOnly(previewPatch);
 }
 
 // Leaving promotes from the waitlist and drops you from memberIds.
@@ -158,10 +164,67 @@ const fullMatchWithWaitlist: MatchData = {
   assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1', 'w2', 'w3'], 'nobody promoted');
   assert.equal(previewPatch.occupiedCount, 10, 'nine players and the new guest');
 
-  // ...and the same list, one guest shorter, does promote: a removal is what frees a spot.
+  // ...and the same list, one guest shorter, promotes exactly one: removing one +1 frees one
+  // spot, so one waitlister takes it. The two spots that were already open before the +1 came
+  // stay open — the owner may be holding them on purpose, and this removal did not free them.
   const removed = buildGuestListPatch({ ...roomy, guests }, []);
-  assert.deepEqual(removed.matchPatch.waitlistPlayerIds, [], 'the free spots fill up');
-  assert.equal(removed.matchPatch.joinedPlayerIds.length, 12);
+  assert.deepEqual(removed.matchPatch.waitlistPlayerIds, ['w2', 'w3'], 'only the freed spot fills');
+  assert.equal(removed.matchPatch.joinedPlayerIds.length, 10);
+  assertPublicOnly(removed.previewPatch);
+}
+
+// The owner removing a +1 promotes nobody, even with spots free and people waiting.
+{
+  const roomy: MatchData = {
+    ...match,
+    capacity: 12,
+    joinedPlayerIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9'],
+    waitlistPlayerIds: ['w1', 'w2', 'w3'],
+    guests: [{ id: 'g9', addedBy: 'u2', createdAt: 'z' }],
+  };
+  const { matchPatch, previewPatch } = buildGuestListPatch(roomy, [], { promote: false });
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1', 'w2', 'w3'], 'nobody promoted');
+  assert.deepEqual(matchPatch.joinedPlayerIds, roomy.joinedPlayerIds, 'roster untouched');
+  assert.deepEqual(matchPatch.guests, []);
+  assert.equal(previewPatch.occupiedCount, 9);
+  assertPublicOnly(previewPatch);
+}
+
+// A voluntary leave fills only the spot it freed. Capacity 6 with four joined: two spots were
+// already open, and the owner may be holding x and y out of them on purpose. Under "fill every
+// free spot" c leaving would pull in both x and y; only c's spot is c's to give away.
+{
+  const m: MatchData = {
+    ...match,
+    capacity: 6,
+    joinedPlayerIds: ['u1', 'a', 'b', 'c'],
+    waitlistPlayerIds: ['x', 'y'],
+    guests: [],
+    creatorId: 'u1',
+  };
+  const { matchPatch, previewPatch } = buildLeavePatch(m, 'c');
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'a', 'b', 'x'], 'x takes the freed spot');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['y'], 'y stays held');
+  assert.equal(previewPatch.occupiedCount, 4);
+  assertPublicOnly(previewPatch);
+}
+
+// A leaver who brought a +1 frees two spots: the next two in line take them, the third waits.
+{
+  const m: MatchData = {
+    ...match,
+    capacity: 6,
+    joinedPlayerIds: ['u1', 'a', 'b', 'c'],
+    waitlistPlayerIds: ['x', 'y', 'z'],
+    guests: [{ id: 'gc', addedBy: 'c', createdAt: 'z' }],
+    creatorId: 'u1',
+  };
+  const { matchPatch, previewPatch } = buildLeavePatch(m, 'c');
+  assert.deepEqual(matchPatch.guests, [], "c's +1 leaves with c");
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'a', 'b', 'x', 'y'], 'two freed, two promoted');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['z'], 'the third still waits');
+  assert.equal(previewPatch.occupiedCount, 5);
+  assertPublicOnly(previewPatch);
 }
 
 // Editing the details: the preview tracks every field it is allowed to hold, and nothing else.
@@ -196,9 +259,7 @@ const fullMatchWithWaitlist: MatchData = {
   assert.ok(previewPatch.price instanceof FieldValue);
   assert.ok(previewPatch.location instanceof FieldValue);
   assert.ok(!('updatedAt' in previewPatch), 'updatedAt is not a preview field');
-  for (const leaked of PRIVATE_FIELDS) {
-    assert.ok(!(leaked in previewPatch), `${leaked} must not reach the preview`);
-  }
+  assertPublicOnly(previewPatch);
 
   // A price and a pin that were set come through as values, not sentinels.
   const pinned = buildDetailsPatch(
@@ -240,9 +301,75 @@ const fullMatchWithWaitlist: MatchData = {
   assert.ok(!('location' in matchPatch) && !('price' in matchPatch), 'blanks are omitted');
   assert.equal(previewPatch.occupiedCount, 1);
   assert.equal(previewPatch.creatorName, 'Jorge');
-  for (const leaked of PRIVATE_FIELDS) {
-    assert.ok(!(leaked in previewPatch), `${leaked} must not reach the preview`);
-  }
+  assertPublicOnly(previewPatch);
+}
+
+// The owner removing someone leaves the spot open: no promotion, the waitlist untouched.
+// Removes 'u2' and not 'u1' deliberately: 'u1' is the fixture's creatorId, and
+// computeMemberIds keeps a creator who left, which would muddy the memberIds assertion.
+{
+  const { matchPatch, previewPatch } = buildLeavePatch(fullMatchWithWaitlist, 'u2', { promote: false });
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1'], 'nobody promoted into the freed spot');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1'], 'the waitlist is left alone');
+  assert.deepEqual(matchPatch.memberIds, ['u1', 'w1']);
+  assert.equal(previewPatch.occupiedCount, 2, 'u1 plus the guest u1 brought');
+  assertPublicOnly(previewPatch);
+  // ...and the default is still the old behaviour: the freed spot promotes w1.
+  assert.deepEqual(
+    buildLeavePatch(fullMatchWithWaitlist, 'u2').matchPatch.joinedPlayerIds,
+    ['u1', 'w1'],
+  );
+}
+
+// A non-creator who brought a +1, removed by the owner: the +1 goes with them, nobody is promoted.
+{
+  const hostedByU2: MatchData = {
+    ...fullMatchWithWaitlist,
+    guests: [{ id: 'g2', addedBy: 'u2', createdAt: 'y' }],
+  };
+  const { matchPatch, previewPatch } = buildLeavePatch(hostedByU2, 'u2', { promote: false });
+  assert.deepEqual(matchPatch.guests, [], "u2's +1 leaves with u2");
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1'], 'nobody promoted into the two freed spots');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1'], 'the waitlist is left alone');
+  assert.deepEqual(matchPatch.memberIds, ['u1', 'w1']);
+  assert.equal(previewPatch.occupiedCount, 1, 'only u1 is left');
+  assertPublicOnly(previewPatch);
+}
+
+// Roster -> waitlist: the spot opens, the +1 leaves, memberIds is unchanged as a set.
+{
+  const { matchPatch, previewPatch } = buildRosterMovePatch(match, 'u1', 'waitlist');
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u2']);
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['u1'], 'appended to the end of the queue');
+  assert.deepEqual(matchPatch.guests, [], 'a player on hold holds no pitch spot for a +1');
+  assert.deepEqual([...matchPatch.memberIds].sort(), ['u1', 'u2']);
+  assert.equal(previewPatch.occupiedCount, 1);
+  assertPublicOnly(previewPatch);
+}
+
+// Waitlist -> roster. This fixture is capacity 3 and the result is 4, on purpose: the
+// builder does not guard capacity, Task 2's caller does, and that split is what lets
+// this same builder repair a roster that is already over capacity.
+{
+  const { matchPatch, previewPatch } = buildRosterMovePatch(fullMatchWithWaitlist, 'w1', 'roster');
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'u2', 'w1']);
+  assert.deepEqual(matchPatch.waitlistPlayerIds, []);
+  assert.equal(previewPatch.occupiedCount, 4, 'two players, the promoted one, and the guest');
+  assertPublicOnly(previewPatch);
+}
+
+// Review Focus 1: the only waitlister, demoted with a roster spot free, must NOT bounce back.
+{
+  const roomy = { ...match, capacity: 10, waitlistPlayerIds: [] };
+  const held = buildRosterMovePatch(roomy, 'u2', 'waitlist');
+  assert.deepEqual(held.matchPatch.joinedPlayerIds, ['u1']);
+  assert.deepEqual(held.matchPatch.waitlistPlayerIds, ['u2'], 'stays on hold, free spot and all');
+}
+
+// Idempotent: moving someone to where they already are changes nothing.
+{
+  const noop = buildRosterMovePatch(fullMatchWithWaitlist, 'w1', 'waitlist');
+  assert.deepEqual(noop.matchPatch.waitlistPlayerIds, ['w1'], 'not duplicated');
 }
 
 console.log('matchWrites.check: ok');

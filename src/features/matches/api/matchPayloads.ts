@@ -180,10 +180,20 @@ export function buildJoinPatch(
 }
 
 /**
- * Leaving, from the roster or from the waitlist. A roster leave also drops the +1 that player
- * brought and promotes the next waitlister into the freed spot; a waitlist leave does neither.
+ * Leaving, from the roster or from the waitlist. A roster leave also drops the +1s that player
+ * brought and promotes into the spots it freed — one for the leaver plus one per dropped +1, and
+ * no more. Spots that were already open stay open: the owner may be holding people on the
+ * waitlist on purpose, and one player leaving must not drain that hold list into every free spot.
+ * The accepted cost: a held player who is next in line does get a freed spot, because nothing
+ * records who was held. A waitlist leave frees no pitch spot, so it promotes nobody.
  * The leaver keeps their `roster` entry — it is a display snapshot, and clearing someone else's
  * key is not a write the rules will allow anyway.
+ *
+ * `promote: false` is passed by the owner removing someone else. A voluntary leave hands the
+ * spot to the next in line because the leaver chose to give it up; when the owner removes a
+ * player they are making room on purpose (or correcting a roster), and silently pulling a
+ * waitlister in would be a second decision the owner never made. Do not "fix" it back to
+ * promoting — the default stays `true` only so every other caller is unchanged.
  */
 export function buildLeavePatch(
   match: Pick<
@@ -191,6 +201,7 @@ export function buildLeavePatch(
     'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'guests' | 'capacity'
   >,
   uid: string,
+  options?: { promote?: boolean },
 ): { matchPatch: MatchRosterPatch; previewPatch: PreviewCountPatch } {
   const wasOnRoster = match.joinedPlayerIds.includes(uid);
   let joined = match.joinedPlayerIds.filter((id) => id !== uid);
@@ -198,10 +209,48 @@ export function buildLeavePatch(
   let guests = [...(match.guests ?? [])];
 
   if (wasOnRoster) {
+    const guestsBefore = guests.length;
     guests = guests.filter((g) => g.addedBy !== uid);
-    const promoted = promoteFromWaitlist(joined, waitlist, guests, match.capacity);
-    joined = promoted.joinedPlayerIds;
-    waitlist = promoted.waitlistPlayerIds;
+    if (options?.promote !== false) {
+      const freed = 1 + (guestsBefore - guests.length);
+      const promoted = promoteFromWaitlist(joined, waitlist, guests, match.capacity, freed);
+      joined = promoted.joinedPlayerIds;
+      waitlist = promoted.waitlistPlayerIds;
+    }
+  }
+
+  return {
+    matchPatch: rosterFields(match, joined, waitlist, guests),
+    previewPatch: occupied(joined, guests),
+  };
+}
+
+/**
+ * The owner moving one player between the roster and the waitlist.
+ *
+ * It never promotes: demoting the only waitlister while a spot is free must leave them on hold,
+ * not bounce them straight back. It also does not check capacity — the caller guards that, and
+ * leaving it out is what lets this same builder repair a roster that is already over capacity.
+ * Demoting drops the +1 the player brought (a player on hold holds no pitch spot); promoting
+ * leaves guests alone. The count is derived from the resulting arrays, never incremented, and
+ * the `roster.<uid>` snapshot is untouched.
+ */
+export function buildRosterMovePatch(
+  match: Pick<MatchData, 'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'guests'>,
+  uid: string,
+  to: 'roster' | 'waitlist',
+): { matchPatch: MatchRosterPatch; previewPatch: PreviewCountPatch } {
+  let joined = [...match.joinedPlayerIds];
+  let waitlist = [...(match.waitlistPlayerIds ?? [])];
+  let guests = [...(match.guests ?? [])];
+
+  if (to === 'waitlist') {
+    joined = joined.filter((id) => id !== uid);
+    if (!waitlist.includes(uid)) waitlist.push(uid);
+    guests = guests.filter((g) => g.addedBy !== uid);
+  } else {
+    waitlist = waitlist.filter((id) => id !== uid);
+    if (!joined.includes(uid)) joined.push(uid);
   }
 
   return {
@@ -216,9 +265,15 @@ export function buildLeavePatch(
  * Only a removal reconciles the waitlist. An add passes the roster arrays through untouched, even
  * when the match has free spots and people waiting: promoting someone because a *different*
  * member brought a guest is not a behavior anything asks for, and it is reachable — capacity 12,
- * 9 joined, 3 waiting, one member clicks +1 and two strangers land on the roster. Whether free
- * spots should auto-promote at all is a product question, and raising `capacity` through
- * `buildDetailsPatch` does not promote either, so this path does not get to decide it alone.
+ * 9 joined, 3 waiting, one member clicks +1 and two strangers land on the roster.
+ *
+ * A removal promotes into the spots it freed — one per +1 removed — and never into spots that were
+ * already open, which the owner may be holding on purpose (raising `capacity` through
+ * `buildDetailsPatch` does not promote either, for the same reason). `promote: false` is for the
+ * owner (or super admin) removing a +1, their own or anyone's: owner actions never promote, the
+ * same rule as the owner removing a player in `buildLeavePatch`. Pulling a held waitlister in
+ * would be a second decision the owner never made. Do not "fix" either half back to filling
+ * every free spot.
  */
 export function buildGuestListPatch(
   match: Pick<
@@ -226,15 +281,18 @@ export function buildGuestListPatch(
     'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'capacity' | 'guests'
   >,
   guests: MatchGuest[],
+  options?: { promote?: boolean },
 ): { matchPatch: MatchRosterPatch; previewPatch: PreviewCountPatch } {
-  const freedASpot = guests.length < (match.guests ?? []).length;
+  const freed = (match.guests ?? []).length - guests.length;
+  const promotes = freed > 0 && options?.promote !== false;
 
-  const { joinedPlayerIds, waitlistPlayerIds } = freedASpot
+  const { joinedPlayerIds, waitlistPlayerIds } = promotes
     ? promoteFromWaitlist(
         match.joinedPlayerIds,
         match.waitlistPlayerIds ?? [],
         guests,
         match.capacity,
+        freed,
       )
     : {
         joinedPlayerIds: match.joinedPlayerIds,
