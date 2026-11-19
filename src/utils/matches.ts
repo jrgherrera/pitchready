@@ -1,10 +1,12 @@
 import { t } from '../i18n';
-import type { CreateMatchForm, MatchData, MatchGuest, PlayerRole, UserProfile } from '../types';
-import { getAvatarUrl } from './avatars';
+import type { CreateMatchForm, MatchData, MatchGuest, PlayerRole, RosterMember, UserProfile } from '../types';
 import { toDateTimeInputs } from './dates';
 
 /** Extra hold / waitlist spots beyond match capacity */
 export const WAITLIST_SLOTS = 4;
+
+/** Past matches shown in the list */
+export const PAST_MATCH_LIMIT = 10;
 
 /** Can edit or delete any match — mirrored in firestore.rules, keep both in sync */
 export const SUPER_ADMIN_EMAIL = 'jrgherrera@gmail.com';
@@ -57,7 +59,6 @@ export type RosterEntry =
       kind: 'player';
       id: string;
       name: string;
-      email?: string;
       role?: PlayerRole;
       photoURL?: string;
       photoUserId: string;
@@ -75,13 +76,35 @@ export type RosterEntry =
       kind: 'waitlist';
       id: string;
       name: string;
-      email?: string;
       role?: PlayerRole;
       photoURL?: string;
       photoUserId: string;
     };
 
-export function getOccupiedCount(match: MatchData) {
+/** Creator first, then joined, then waitlist, de-duplicated. Drives who can read a match. */
+export function computeMemberIds(
+  match: Pick<MatchData, 'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds'>,
+): string[] {
+  return [...new Set([match.creatorId, ...match.joinedPlayerIds, ...(match.waitlistPlayerIds ?? [])])];
+}
+
+/** Roster snapshot of a profile; absent optionals are omitted because Firestore rejects undefined. */
+export function rosterEntryFor(
+  profile: Pick<UserProfile, 'id' | 'name' | 'role' | 'photoURL'>,
+): RosterMember {
+  return {
+    name: profile.name,
+    ...(profile.role && { role: profile.role }),
+    ...(profile.photoURL && { photoURL: profile.photoURL }),
+  };
+}
+
+/**
+ * Roster players plus their +1s — the one definition of occupancy. `Pick` rather than `MatchData`
+ * so a payload builder holding only the next arrays can use it too; `occupiedCount` is the single
+ * number link-holders see, and it must not be computed two ways.
+ */
+export function getOccupiedCount(match: Pick<MatchData, 'joinedPlayerIds' | 'guests'>) {
   return match.joinedPlayerIds.length + (match.guests?.length ?? 0);
 }
 
@@ -140,64 +163,39 @@ export function promoteFromWaitlist(
   return { joinedPlayerIds: joined, waitlistPlayerIds: waitlist };
 }
 
-export function resolveJoinedPlayers(
-  match: MatchData,
-  allPlayers: UserProfile[],
-): UserProfile[] {
-  return match.joinedPlayerIds.map((id) => {
-    return (
-      allPlayers.find((p) => p.id === id) || {
-        id,
-        name: t('matches.guestPlayer'),
-        email: '',
-        role: 'Striker' as const,
-        photoURL: getAvatarUrl(id),
-      }
-    );
-  });
-}
-
-export function resolveRoster(match: MatchData, allPlayers: UserProfile[]): RosterEntry[] {
+export function resolveRoster(match: MatchData): RosterEntry[] {
   const players: RosterEntry[] = match.joinedPlayerIds.map((id) => {
-    const found = allPlayers.find((p) => p.id === id);
+    const found = match.roster?.[id];
     return {
       kind: 'player' as const,
       id,
       name: found?.name || t('matches.guestPlayer'),
-      email: found?.email,
       role: found?.role || ('Striker' as const),
       photoURL: found?.photoURL,
       photoUserId: id,
     };
   });
 
-  const guests: RosterEntry[] = (match.guests ?? []).map((guest: MatchGuest) => {
-    const host = allPlayers.find((p) => p.id === guest.addedBy);
-    return {
-      kind: 'guest' as const,
-      id: guest.id,
-      name: t('matches.guest'),
-      addedBy: guest.addedBy,
-      photoURL: host?.photoURL,
-      photoUserId: guest.addedBy,
-      role: 'Striker' as const,
-    };
-  });
+  const guests: RosterEntry[] = (match.guests ?? []).map((guest: MatchGuest) => ({
+    kind: 'guest' as const,
+    id: guest.id,
+    name: t('matches.guest'),
+    addedBy: guest.addedBy,
+    photoURL: match.roster?.[guest.addedBy]?.photoURL,
+    photoUserId: guest.addedBy,
+    role: 'Striker' as const,
+  }));
 
   return [...players, ...guests];
 }
 
-export function resolveWaitlist(
-  match: MatchData,
-  allPlayers: UserProfile[],
-): Extract<RosterEntry, { kind: 'waitlist' }>[] {
+export function resolveWaitlist(match: MatchData): Extract<RosterEntry, { kind: 'waitlist' }>[] {
   return (match.waitlistPlayerIds ?? []).map((id) => {
-    const found = allPlayers.find((p) => p.id === id);
+    const found = match.roster?.[id];
     return {
       kind: 'waitlist' as const,
       id,
       name: found?.name || t('matches.guestPlayer'),
-      email: found?.email,
       role: found?.role || ('Striker' as const),
       photoURL: found?.photoURL,
       photoUserId: id,

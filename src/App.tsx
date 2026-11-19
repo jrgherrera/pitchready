@@ -1,21 +1,23 @@
+import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { AppHeader, BottomNav } from './components/layout/AppShell';
+import { useT } from './i18n';
+import { getStoredGuestName } from './utils/guestName';
+import { AppHeader } from './components/layout/AppShell';
 import { LoadingScreen } from './components/ui/LoadingScreen';
 import { ForgotPasswordForm } from './features/auth/components/ForgotPasswordForm';
 import { LoginScreen } from './features/auth/components/LoginScreen';
 import { OnboardingScreen } from './features/auth/components/OnboardingScreen';
+import { UpgradeAccountScreen } from './features/auth/components/UpgradeAccountScreen';
 import { VerifyEmailScreen } from './features/auth/components/VerifyEmailScreen';
 import { useAuth } from './features/auth/hooks/useAuth';
 import { CreateMatchModal } from './features/matches/components/CreateMatchModal';
-import { DashboardTab } from './features/matches/components/DashboardTab';
+import { MatchInviteScreen } from './features/matches/components/MatchInviteScreen';
 import { MatchDetailView } from './features/matches/components/MatchDetailView';
-import { MatchesTab } from './features/matches/components/MatchesTab';
+import { MyMatchesScreen } from './features/matches/components/MyMatchesScreen';
 import { useMatchActions } from './features/matches/hooks/useMatchActions';
-import { useMatches } from './features/matches/hooks/useMatches';
-import { PlayersTab } from './features/players/components/PlayersTab';
-import { usePlayers } from './features/players/hooks/usePlayers';
+import { useMyMatches } from './features/matches/hooks/useMyMatches';
 import { SettingsTab } from './features/settings/components/SettingsTab';
-import type { AppTab, MatchData } from './types';
+import type { MatchData } from './types';
 import {
   canManageMatch,
   getStoredSuperAdminMode,
@@ -26,6 +28,7 @@ import {
 type AuthView = 'login' | 'forgot-password';
 
 export default function App() {
+  const t = useT();
   const {
     user,
     profile,
@@ -38,6 +41,10 @@ export default function App() {
     clearMessages,
     signUp,
     signIn,
+    isGuest,
+    setGuestName,
+    upgradeGuestWithGoogle,
+    upgradeGuestWithPassword,
     requestMagicLink,
     resetPassword,
     loginWithGoogle,
@@ -48,17 +55,23 @@ export default function App() {
     updateUserProfile,
   } = useAuth();
 
-  const { matches, matchesLoading } = useMatches(user);
-  const { allPlayers } = usePlayers(user);
+  const { upcoming, past, loading: matchesLoading, failed: matchesFailed } = useMyMatches(user);
+  const matches = [...upcoming, ...past];
 
   const [authView, setAuthView] = useState<AuthView>('login');
-  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
+  const [showSettings, setShowSettings] = useState(false);
   // Shared links land on /match/<id> (hosting rewrites it to index.html)
   const [activeMatchId, setActiveMatchId] = useState<string | null>(
     () => matchIdFromPath(window.location.pathname),
   );
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [superAdminMode, setSuperAdminMode] = useState(getStoredSuperAdminMode);
+
+  // Once linked the guest is gone: drop the screen so it cannot reappear for a later guest
+  useEffect(() => {
+    if (!isGuest) setShowUpgrade(false);
+  }, [isGuest]);
 
   // Keep the address bar on the open match so a refresh or a copied URL lands back here
   useEffect(() => {
@@ -91,6 +104,30 @@ export default function App() {
     },
     () => setActiveMatchId(null),
   );
+
+  // A link to a match the visitor is not in: show the invitation instead of a login wall.
+  // Must precede every auth gate so a visitor with no session never meets one, and so the screen
+  // stays mounted while it creates the guest session mid-submit.
+  const activeMatch = matches.find((m) => m.id === activeMatchId);
+  if (
+    activeMatchId &&
+    !activeMatch &&
+    !authLoading &&
+    // authLoading is gate === 'loading', so a signed-in user's profile still arriving is excluded
+    // above; verify-email and onboarding do not block joining, so the invitation outranks them.
+    !showUpgrade
+  ) {
+    return (
+      <MatchInviteScreen
+        matchId={activeMatchId}
+        user={user}
+        profile={profile}
+        membershipKnown={!user || !matchesLoading}
+        onGuestName={setGuestName}
+        onExit={() => setActiveMatchId(null)}
+      />
+    );
+  }
 
   if (authLoading || gate === 'loading') {
     return <LoadingScreen />;
@@ -159,7 +196,7 @@ export default function App() {
   if (gate === 'onboarding' && user) {
     return (
       <OnboardingScreen
-        initialName={profile?.name || user.displayName || ''}
+        initialName={profile?.name || user.displayName || getStoredGuestName()}
         busy={authBusy}
         error={authError}
         onSubmit={completeOnboarding}
@@ -175,7 +212,25 @@ export default function App() {
     return <LoadingScreen />;
   }
 
-  const activeMatch = matches.find((m) => m.id === activeMatchId);
+  if (isGuest && showUpgrade) {
+    return (
+      <UpgradeAccountScreen
+        busy={authBusy}
+        error={authError}
+        onGoogle={async () => {
+          await upgradeGuestWithGoogle();
+        }}
+        onPassword={async (email, password) => {
+          await upgradeGuestWithPassword(email, password);
+        }}
+        onBack={() => {
+          clearMessages();
+          setShowUpgrade(false);
+        }}
+      />
+    );
+  }
+
   const canManage = (match: MatchData) => canManageMatch(match, profile, superAdminMode);
 
   if (activeMatchId && activeMatch) {
@@ -184,7 +239,8 @@ export default function App() {
         <MatchDetailView
           match={activeMatch}
           profile={profile}
-          players={allPlayers}
+          isGuest={isGuest}
+          onGuestName={setGuestName}
           signUpStatus={signUpStatus}
           canManage={canManage(activeMatch)}
           onBack={() => setActiveMatchId(null)}
@@ -199,6 +255,7 @@ export default function App() {
         {editingMatchId && (
           <CreateMatchModal
             form={createForm}
+            uid={profile.id}
             creating={creatingMatch}
             editing
             onChange={setCreateForm}
@@ -210,70 +267,74 @@ export default function App() {
     );
   }
 
-  const changeTab = (tab: AppTab) => {
-    setActiveTab(tab);
-    setActiveMatchId(null);
-  };
-
   return (
-    <div className="bg-[#020f0b] text-white min-h-screen pb-24 font-archivo">
-      <AppHeader profile={profile} onOpenSettings={() => changeTab('settings')} />
+    <div className="bg-[#020f0b] text-white min-h-screen pb-8 font-archivo">
+      <AppHeader profile={profile} onOpenSettings={() => setShowSettings(true)} />
 
       <main className="max-w-md mx-auto px-4 py-6">
-        {activeTab === 'dashboard' && (
-          <DashboardTab
-            matches={matches}
-            matchesLoading={matchesLoading}
-            players={allPlayers}
-            canHostMatches={Boolean(profile.admin)}
+        {showSettings ? (
+          <>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="flex items-center gap-1 text-sm text-gray-400 hover:text-white mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" /> {t('settings.back')}
+            </button>
+            <SettingsTab
+              profile={profile}
+              superAdminMode={superAdminMode}
+              onProfileChange={setProfile}
+              onSuperAdminModeChange={(enabled) => {
+                storeSuperAdminMode(enabled);
+                setSuperAdminMode(enabled);
+              }}
+              onUpgrade={
+                isGuest
+                  ? () => {
+                      clearMessages();
+                      setShowUpgrade(true);
+                    }
+                  : undefined
+              }
+              onSave={(e) => {
+                e.preventDefault();
+                // Guests have no users/{uid} doc: their "profile" is the cached name alone.
+                if (isGuest) setGuestName(profile.name);
+                else void updateUserProfile(profile);
+              }}
+              onLogout={() => {
+                // An anonymous session cannot be signed back into: say so before ending it.
+                if (isGuest && !window.confirm(t('settings.guestLogOutConfirm'))) return;
+                void logout();
+                setActiveMatchId(null);
+                setShowSettings(false);
+                setAuthView('login');
+              }}
+            />
+          </>
+        ) : (
+          <MyMatchesScreen
+            upcoming={upcoming}
+            past={past}
+            loading={matchesLoading}
+            failed={matchesFailed}
+            isGuest={isGuest}
             canManage={canManage}
             onOpenMatch={setActiveMatchId}
+            onDeleteMatch={deleteMatch}
             onCreateMatch={() => setShowCreateModal(true)}
-            onViewAllMatches={() => changeTab('matches')}
-          />
-        )}
-
-        {activeTab === 'matches' && (
-          <MatchesTab
-            matches={matches}
-            matchesLoading={matchesLoading}
-            canHostMatches={Boolean(profile.admin)}
-            onOpenMatch={setActiveMatchId}
-            onCreateMatch={() => setShowCreateModal(true)}
-          />
-        )}
-
-        {activeTab === 'players' && (
-          <PlayersTab players={allPlayers} currentUserId={profile.id} />
-        )}
-
-        {activeTab === 'settings' && (
-          <SettingsTab
-            profile={profile}
-            superAdminMode={superAdminMode}
-            onProfileChange={setProfile}
-            onSuperAdminModeChange={(enabled) => {
-              storeSuperAdminMode(enabled);
-              setSuperAdminMode(enabled);
-            }}
-            onSave={(e) => {
-              e.preventDefault();
-              void updateUserProfile(profile);
-            }}
-            onLogout={() => {
-              void logout();
-              setActiveMatchId(null);
-              setAuthView('login');
+            onCreateAccount={() => {
+              clearMessages();
+              setShowUpgrade(true);
             }}
           />
         )}
       </main>
 
-      <BottomNav activeTab={activeTab} onChangeTab={changeTab} />
-
-      {showCreateModal && profile.admin && (
+      {showCreateModal && (
         <CreateMatchModal
           form={createForm}
+          uid={profile.id}
           creating={creatingMatch}
           onChange={setCreateForm}
           onClose={() => setShowCreateModal(false)}

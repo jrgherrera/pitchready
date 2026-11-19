@@ -39,7 +39,7 @@ export function toFirestoreProfile(profile: UserProfile): Record<string, unknown
   if (typeof profile.onboardingComplete === 'boolean') {
     payload.onboardingComplete = profile.onboardingComplete;
   }
-  // Never write `admin` from the client — set only in Firebase Console.
+  // `admin` is a retired flag nothing reads; the client never writes it and the rules refuse changes to it.
   return payload;
 }
 

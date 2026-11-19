@@ -26,11 +26,12 @@ export interface FirestoreErrorInfo {
   };
 }
 
+/** Always throws — the `never` is load-bearing, so callers cannot fall through on failure. */
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null,
-) {
+): never {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {

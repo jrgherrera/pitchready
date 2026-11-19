@@ -12,6 +12,8 @@ interface SettingsTabProps {
   onSuperAdminModeChange: (enabled: boolean) => void;
   onSave: (e: React.FormEvent) => void;
   onLogout: () => void;
+  /** Set only for guests. */
+  onUpgrade?: () => void;
 }
 
 export function SettingsTab({
@@ -21,6 +23,7 @@ export function SettingsTab({
   onSuperAdminModeChange,
   onSave,
   onLogout,
+  onUpgrade,
 }: SettingsTabProps) {
   const { t, localePreference, setLocalePreference } = useI18n();
 
@@ -35,6 +38,22 @@ export function SettingsTab({
         </p>
       </header>
 
+      {onUpgrade && (
+        <div className="bg-[#0a1c17] border border-[#d4f000]/40 p-5 rounded-xl space-y-3 match-card-shadow">
+          <h3 className="font-anton uppercase tracking-wider text-[#d4f000]">
+            {t('settings.upgradeTitle')}
+          </h3>
+          <p className="text-xs text-gray-400">{t('settings.upgradeHint')}</p>
+          <button
+            type="button"
+            onClick={onUpgrade}
+            className="w-full bg-[#d4f000] hover:bg-[#c3dd00] text-[#001710] font-anton py-3 rounded-lg uppercase tracking-wider text-sm"
+          >
+            {t('settings.upgradeButton')}
+          </button>
+        </div>
+      )}
+
       <form
         onSubmit={onSave}
         className="bg-[#0a1c17] border border-[#1f453a] p-5 rounded-xl space-y-4 match-card-shadow"
@@ -47,11 +66,6 @@ export function SettingsTab({
             className="w-20 h-20 rounded-full border-2 border-[#d4f000] mb-3 bg-[#020f0b] object-cover"
           />
           <p className="text-xs text-gray-400 font-bold uppercase">{profile.email}</p>
-          {profile.admin && (
-            <span className="mt-2 text-[10px] bg-[#d4f000] text-[#001710] px-2 py-0.5 rounded-full font-anton uppercase">
-              {t('common.admin')}
-            </span>
-          )}
         </div>
 
         <div className="space-y-1">

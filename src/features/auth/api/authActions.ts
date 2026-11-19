@@ -1,17 +1,23 @@
 import {
+  EmailAuthProvider,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   getRedirectResult,
   isSignInWithEmailLink,
+  linkWithCredential,
+  linkWithPopup,
+  linkWithRedirect,
   sendEmailVerification,
   sendPasswordResetEmail,
   sendSignInLinkToEmail,
+  signInAnonymously,
   signInWithEmailAndPassword,
   signInWithEmailLink,
   signInWithPopup,
   signInWithRedirect,
   signOut,
   type ActionCodeSettings,
+  type UserCredential,
   type User,
 } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
@@ -54,6 +60,8 @@ export function getAuthErrorMessage(error: unknown): string {
   }
 
   switch (error.code) {
+    case 'auth/credential-already-in-use':
+      return t('auth.errors.credentialInUse');
     case 'auth/email-already-in-use':
       return t('auth.errors.emailInUse');
     case 'auth/invalid-email':
@@ -121,6 +129,12 @@ export async function sendMagicLink(email: string): Promise<void> {
   window.localStorage.setItem(MAGIC_LINK_EMAIL_KEY, normalized);
 }
 
+// Deliberately NOT a guest-upgrade path. This runs on cold page load and calls
+// signInWithEmailLink, which signs in a *different* user and discards the anonymous uid,
+// silently losing the guest's rosters and history. Keeping it would need
+// EmailAuthProvider.credentialWithLink plus certainty that the anonymous session was
+// restored before this runs, which the effect ordering in useAuth does not guarantee.
+// Guests upgrade only via upgradeWithGoogle / upgradeWithPassword below.
 export async function completeMagicLinkIfPresent(): Promise<User | null> {
   if (!isSignInWithEmailLink(auth, window.location.href)) {
     return null;
@@ -164,9 +178,8 @@ export async function signInWithGoogle(): Promise<User | null> {
 }
 
 /** Complete Google redirect sign-in when returning to the app. */
-export async function completeGoogleRedirectIfPresent(): Promise<User | null> {
-  const result = await getRedirectResult(auth);
-  return result?.user ?? null;
+export async function completeGoogleRedirectIfPresent(): Promise<UserCredential | null> {
+  return getRedirectResult(auth);
 }
 
 export async function resendEmailVerification(user: User): Promise<void> {
@@ -189,4 +202,57 @@ export function needsEmailVerification(user: User): boolean {
   if (user.providerData.some((p) => p.providerId === 'google.com')) return false;
   // Password / email-link accounts must verify.
   return isEmailProviderUser(user);
+}
+
+/** Call on a visitor's action (e.g. submitting an invitation), never on mere page view. */
+export async function signInAsGuest(): Promise<User> {
+  try {
+    const credential = await signInAnonymously(auth);
+    return credential.user;
+  } catch (error) {
+    // Anonymous provider switched off: say so, not the Google message the shared mapping gives.
+    if (error instanceof FirebaseError && error.code === 'auth/operation-not-allowed') {
+      throw new Error(t('auth.errors.guestDisabled'));
+    }
+    throw error;
+  }
+}
+
+export function isGuest(user: User): boolean {
+  return user.isAnonymous;
+}
+
+function requireGuestUser(): User {
+  const user = auth.currentUser;
+  if (!user || !isGuest(user)) throw new Error(t('auth.errors.generic'));
+  return user;
+}
+
+/** Upgrade the current guest in place (same uid, so rosters and history follow). */
+export async function upgradeWithGoogle(): Promise<User | null> {
+  const guest = requireGuestUser();
+  const provider = createGoogleProvider();
+
+  try {
+    const credential = await linkWithPopup(guest, provider);
+    return credential.user;
+  } catch (error) {
+    if (error instanceof FirebaseError && POPUP_FALLBACK_CODES.has(error.code)) {
+      // Same fallback as signInWithGoogle; the result is picked up by getRedirectResult.
+      await linkWithRedirect(guest, provider);
+      return null;
+    }
+    throw error;
+  }
+}
+
+/** Email upgrade needs a verified email before creating matches, so send the link now. */
+export async function upgradeWithPassword(email: string, password: string): Promise<User> {
+  const guest = requireGuestUser();
+  const credential = await linkWithCredential(
+    guest,
+    EmailAuthProvider.credential(email.trim(), password),
+  );
+  await sendEmailVerification(credential.user);
+  return credential.user;
 }

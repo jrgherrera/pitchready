@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Loader2, MapPin, X } from 'lucide-react';
 import { useT } from '../../../i18n';
 import type { CreateMatchForm } from '../../../types';
+import { WEEKLY_MATCH_LIMIT } from '../../../utils/weeks';
 import { getLocationAddress, getLocationLabel } from '../../../utils/location';
+import { countMyActiveMatchesInWeek } from '../api/matchWrites';
+import { isWeekAtLimit } from '../api/weeklyLimit';
 import { LocationPickerModal } from './LocationPickerModal';
 
 interface CreateMatchModalProps {
   form: CreateMatchForm;
+  /** The host — the weekly cap counts matches they created */
+  uid: string;
   creating: boolean;
   /** Same form, editing an existing match — only the wording changes */
   editing?: boolean;
@@ -17,6 +22,7 @@ interface CreateMatchModalProps {
 
 export function CreateMatchModal({
   form,
+  uid,
   creating,
   editing = false,
   onChange,
@@ -25,6 +31,27 @@ export function CreateMatchModal({
 }: CreateMatchModalProps) {
   const t = useT();
   const [showMapPicker, setShowMapPicker] = useState(false);
+  const [weekFull, setWeekFull] = useState(false);
+  const [lookupFailed, setLookupFailed] = useState(false);
+
+  // Editing keeps the match's own slot, so only a new match is checked, and only once it has a date
+  useEffect(() => {
+    setWeekFull(false);
+    setLookupFailed(false);
+    if (editing || !form.date) return;
+    let stale = false;
+    const [y, m, d] = form.date.split('-').map(Number);
+    countMyActiveMatchesInWeek(uid, new Date(y, m - 1, d))
+      .then((count) => !stale && setWeekFull(isWeekAtLimit(count)))
+      .catch(() => {
+        // Fail open, loudly: a transient read error must not block a host, but silence would
+        // make the cap look like it works while it does not
+        if (!stale) setLookupFailed(true);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [editing, uid, form.date]);
 
   return (
     <>
@@ -118,6 +145,16 @@ export function CreateMatchModal({
                   value={form.date}
                   onChange={(e) => onChange({ ...form, date: e.target.value })}
                 />
+                {lookupFailed && (
+                  <p role="alert" className="text-[11px] text-amber-400 pt-0.5">
+                    {t('createMatch.weeklyLimitUnchecked')}
+                  </p>
+                )}
+                {weekFull && (
+                  <p role="alert" className="text-[11px] text-red-400 pt-0.5">
+                    {t('createMatch.weeklyLimit', { count: WEEKLY_MATCH_LIMIT })}
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-gray-400 block">{t('createMatch.time')}</label>
@@ -187,7 +224,7 @@ export function CreateMatchModal({
 
             <button
               type="submit"
-              disabled={creating}
+              disabled={creating || weekFull}
               className="w-full bg-[#d4f000] hover:bg-[#b0c800] text-[#001710] font-anton py-4 rounded-xl uppercase tracking-wider text-base transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#d4f000]/10 disabled:opacity-80"
             >
             {creating ? (

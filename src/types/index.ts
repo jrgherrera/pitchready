@@ -1,7 +1,5 @@
 export type PlayerRole = 'Captain' | 'Striker' | 'Midfield' | 'Keeper' | 'Defender';
 
-export type AppTab = 'dashboard' | 'matches' | 'players' | 'settings';
-
 export type MatchStatus = 'needs_players' | 'confirmed' | 'cancelled';
 
 export type SignUpStatus = 'idle' | 'processing' | 'confirmed';
@@ -12,8 +10,6 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   role?: PlayerRole;
-  /** Set manually in Firebase Console — only admins can host matches */
-  admin?: boolean;
   /** True after the user finishes first-time profile setup */
   onboardingComplete?: boolean;
   createdAt?: string;
@@ -55,8 +51,33 @@ export interface MatchData {
   /** Team draft by the host — Firestore has no nested arrays, so each team is a map of roster ids */
   teams?: { members: string[] }[];
   creatorId: string;
+  /** Display snapshot of everyone in the match, keyed by user id. Legacy docs lack it. */
+  roster?: Record<string, RosterMember>;
+  /** Creator + joined + waitlist ids, kept in sync on every write. Legacy docs lack it. */
+  memberIds?: string[];
+  creatorName?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface RosterMember {
+  name: string;
+  role?: PlayerRole;
+  photoURL?: string;
+}
+
+/** The non-members' view of a match: enough to decide to join, nothing about who is in it. */
+export interface MatchPreview {
+  id: string;
+  title: string;
+  date: Date;
+  duration?: number;
+  location?: MatchLocation | string;
+  price?: number;
+  capacity: number;
+  occupiedCount: number;
+  status?: MatchStatus;
+  creatorName: string;
 }
 
 export interface CreateMatchForm {

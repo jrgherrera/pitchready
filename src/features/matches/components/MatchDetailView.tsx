@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Award,
@@ -7,11 +7,13 @@ import {
   Clock,
   Loader2,
   Pencil,
+  Share2,
   Trash2,
   UserPlus,
   Zap,
 } from 'lucide-react';
 import { useI18n } from '../../../i18n';
+import { refreshOwnRosterEntry } from '../api/matchWrites';
 import type { MatchData, MatchLocation, SignUpStatus, UserProfile } from '../../../types';
 import { getAvatarUrl } from '../../../utils/avatars';
 import {
@@ -33,9 +35,11 @@ import {
   isMatchFull,
   resolveRoster,
   resolveWaitlist,
+  shareMatchLink,
 } from '../../../utils/matches';
 import { MATCH_HERO_IMAGE } from '../constants';
 import { AddPlusOneModal } from './AddPlusOneModal';
+import { ConfirmDeleteMatchModal } from './ConfirmDeleteMatchModal';
 import { MatchLocationMap } from './MatchLocationMap';
 import { RemoveGuestModal } from './RemoveGuestModal';
 import { TeamsSection } from './TeamsSection';
@@ -43,7 +47,9 @@ import { TeamsSection } from './TeamsSection';
 interface MatchDetailViewProps {
   match: MatchData;
   profile: UserProfile;
-  players: UserProfile[];
+  /** Guests keep their name only in localStorage; the roster is the other copy. */
+  isGuest: boolean;
+  onGuestName: (name: string) => void;
   signUpStatus: SignUpStatus;
   canManage: boolean;
   onBack: () => void;
@@ -58,7 +64,8 @@ interface MatchDetailViewProps {
 export function MatchDetailView({
   match,
   profile,
-  players,
+  isGuest,
+  onGuestName,
   signUpStatus,
   canManage,
   onBack,
@@ -80,6 +87,20 @@ export function MatchDetailView({
     photoURL?: string;
   } | null>(null);
   const [removingGuest, setRemovingGuest] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletingMatch, setDeletingMatch] = useState(false);
+
+
+  // Names age: let a renamed member's own roster entry catch up when they open the match
+  useEffect(() => {
+    if (!match.memberIds?.includes(profile.id)) return;
+    // Cleared site data leaves a guest signed in but nameless: take the name back from the roster
+    // rather than let the refresh below overwrite it.
+    const rosterName = match.roster?.[profile.id]?.name;
+    if (isGuest && !profile.name.trim() && rosterName) onGuestName(rosterName);
+    void refreshOwnRosterEntry(match, profile);
+  // Deliberately keyed on match.id only: run once per opened match, not on every snapshot or profile change.
+  }, [match.id]);
 
   const isPlayerInRoster = match.joinedPlayerIds.includes(profile.id);
   const isOnWaitlist = (match.waitlistPlayerIds ?? []).includes(profile.id);
@@ -87,8 +108,8 @@ export function MatchDetailView({
   const capacityPercentage = getCapacityPercent(match);
   const spotsLeft = getSpotsLeft(match);
   const waitlistSpotsLeft = getWaitlistSpotsLeft(match);
-  const roster = resolveRoster(match, players);
-  const waitlist = resolveWaitlist(match, players);
+  const roster = resolveRoster(match);
+  const waitlist = resolveWaitlist(match);
   const heroImage = MATCH_HERO_IMAGE;
   const locationLabel = getLocationLabel(match.location);
   const locationAddress = getLocationAddress(match.location);
@@ -125,7 +146,7 @@ export function MatchDetailView({
   };
 
   const canManageGuest = (addedBy: string) =>
-    addedBy === profile.id || match.creatorId === profile.id || Boolean(profile.admin);
+    addedBy === profile.id || match.creatorId === profile.id;
 
   const openRemoveGuest = (entry: {
     id: string;
@@ -151,9 +172,19 @@ export function MatchDetailView({
     }
   };
 
+  const confirmDeleteMatch = async () => {
+    setDeletingMatch(true);
+    try {
+      await onDelete(match.id);
+      setConfirmingDelete(false);
+    } finally {
+      setDeletingMatch(false);
+    }
+  };
+
   const removeHost =
     guestToRemove &&
-    (players.find((p) => p.id === guestToRemove.addedBy) || {
+    ((match.roster?.[guestToRemove.addedBy] && { id: guestToRemove.addedBy, ...match.roster[guestToRemove.addedBy] }) || {
       id: guestToRemove.addedBy,
       name: t('common.player'),
       photoURL: guestToRemove.photoURL,
@@ -173,6 +204,13 @@ export function MatchDetailView({
             {t('brand')}
           </span>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => shareMatchLink(match.id)}
+              aria-label={t('matches.share')}
+              className="p-2 rounded-lg bg-[#0f2d24] text-gray-300 hover:text-white hover:bg-[#1f453a] border border-[#1f453a] transition-all active:scale-95"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
             <img
               src={getAvatarUrl(profile.id, profile.photoURL)}
               alt={profile.name}
@@ -485,10 +523,10 @@ export function MatchDetailView({
                           {entry.kind === 'guest'
                             ? t('matches.plusOneFor', {
                                 name:
-                                  players.find((p) => p.id === entry.addedBy)?.name ||
+                                  match.roster?.[entry.addedBy]?.name ||
                                   t('common.player'),
                               })
-                            : entry.email || t('matches.privateEmail')}
+                            : t('matches.privateEmail')}
                         </p>
                       </div>
                     </div>
@@ -564,7 +602,7 @@ export function MatchDetailView({
                     <div>
                       <p className="font-bold text-sm text-amber-50">{entry.name}</p>
                       <p className="text-xs text-amber-200/60">
-                        {entry.email || t('matches.privateEmail')}
+                        {t('matches.privateEmail')}
                       </p>
                     </div>
                   </div>
@@ -613,7 +651,7 @@ export function MatchDetailView({
               <Pencil className="w-4 h-4" /> {t('matches.editMatch')}
             </button>
             <button
-              onClick={() => onDelete(match.id)}
+              onClick={() => setConfirmingDelete(true)}
               className="w-full bg-red-950/40 hover:bg-red-900/50 text-red-400 border border-red-900/60 font-anton py-3.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-2"
             >
               <Trash2 className="w-4 h-4" /> {t('matches.cancelDelete')}
@@ -695,6 +733,17 @@ export function MatchDetailView({
           onClose={() => setShowPlusOneModal(false)}
           onConfirm={() => {
             void confirmPlusOne();
+          }}
+        />
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDeleteMatchModal
+          matchTitle={match.title}
+          busy={deletingMatch}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => {
+            void confirmDeleteMatch();
           }}
         />
       )}

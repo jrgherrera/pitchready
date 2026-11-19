@@ -2,7 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global Safety Net
+    // Documentation only: Firestore ORs `allow` rules, so this denies nothing. Access is whatever the
+    // per-collection rules below grant; add a real guard there, not here.
     match /{document=**} {
       allow read, write: if false;
     }
@@ -15,8 +16,11 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    // Signed in with a real account. Anonymous attendees read a preview by link and join a match;
+    // they have no users/{uid} document and they do not create matches.
+    function isRegistered() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
     // Mirrored in src/utils/matches.ts (SUPER_ADMIN_EMAIL) — keep both in sync
@@ -26,49 +30,142 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
-    function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc().admin == true;
-    }
-
-    // Matches — admins create; only the creator (or super admin) edits; anyone joins
+    // Matches — any verified account creates; only the creator (or super admin) edits; anyone joins
     match /matches/{matchId} {
       // Fields a player changes by joining, leaving, or bringing a +1
+      // roster rides as dotted `roster.<uid>` keys: the caller may touch only their own entry.
+      // memberIds is the Task 6 read gate: its symmetric difference must be {caller} or {} (join adds the
+      // caller, leave removes the caller, promotion moves ids between arrays without changing the set).
+      // (Promotion adds other uids to joinedPlayerIds, never to roster — they wrote their own when they joined.)
       function onlyRosterChanged() {
-        return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['joinedPlayerIds', 'waitlistPlayerIds', 'guests', 'updatedAt']);
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return changed.hasOnly(['joinedPlayerIds', 'waitlistPlayerIds', 'guests', 'memberIds', 'roster', 'updatedAt'])
+          && (!changed.hasAny(['roster'])
+            || request.resource.data.roster.diff(resource.data.get('roster', {})).affectedKeys()
+              .hasOnly([request.auth.uid]))
+          // Both memberIds constraints are needed; each looks redundant beside the other.
+          // Derived: memberIds must equal creator + joined + waitlist, so it cannot be an independent grant
+          // (symdiff alone allows memberIds + [me] with the arrays untouched).
+          // Symdiff: only the caller may enter or leave, since joinedPlayerIds contents are otherwise
+          // unconstrained (derived alone allows wiping the roster with a matching memberIds).
+          && (!changed.hasAny(['memberIds'])
+            || request.resource.data.memberIds.toSet() ==
+                 [request.resource.data.get('creatorId', '')].toSet()
+                   .union(request.resource.data.get('joinedPlayerIds', []).toSet())
+                   .union(request.resource.data.get('waitlistPlayerIds', []).toSet()))
+          && (!changed.hasAny(['memberIds'])
+            || request.resource.data.memberIds.toSet()
+                 .difference(resource.data.get('memberIds', []).toSet())
+               .union(resource.data.get('memberIds', []).toSet()
+                 .difference(request.resource.data.memberIds.toSet()))
+               .hasOnly([request.auth.uid]));
       }
 
-      // Super admin first: legacy docs may lack creatorId, and a missing-key read denies
+      function occupied(d) {
+        return d.get('joinedPlayerIds', []).size() + d.get('guests', []).size();
+      }
+
+      // A doc with no capacity counts as the app's default of 10 (createMatch's fallback), not as unreadable.
+      // Never grow past capacity, but a legacy or host-shrunk match already over it can still shrink
+      function withinCapacity() {
+        return occupied(request.resource.data) <= occupied(resource.data)
+          || occupied(request.resource.data) <= resource.data.get('capacity', 10);
+      }
+
+      // Operand order costs nothing either way: .get('creatorId', '') already reads a legacy doc
+      // with no creatorId as '' rather than erroring, and an erroring operand would lose to a true
+      // one regardless (measured — see the note on `allow get` below).
       function isMatchOwner() {
         return isSignedIn()
           && (isSuperAdmin() || resource.data.get('creatorId', '') == request.auth.uid);
       }
 
-      allow read: if isSignedIn();
+      // A match is visible to its members only — creator, roster and waitlist all ride in memberIds.
+      // isSuperAdmin() is break-glass for a single known id, deliberately NOT on `list`: reading one
+      // document the owner names is a different cost class from enumerating the collection.
+      // isSuperAdmin() errors for a token with no email claim, which is every anonymous attendee's,
+      // and that is harmless: measured in the emulator, an erroring operand loses to a true one in
+      // either position (`error || true` ALLOWS, `error || false` DENIES), so an error decides the
+      // outcome only when no branch is true. Operand order is therefore free here — a member reads
+      // whichever side isSuperAdmin() sits on — and the .get(..., default) calls are defence in
+      // depth, not a requirement: they keep every branch a plain boolean. Earlier revisions of this
+      // comment claimed both were load-bearing. They are not; the measurement says so.
+      allow get: if isSignedIn()
+        && (request.auth.uid in resource.data.get('memberIds', []) || isSuperAdmin());
 
-      allow create: if (isAdmin() || isSuperAdmin())
+      // `list` is NOT evaluated against the documents a query returns: it is evaluated against what
+      // the query's own filters prove, with unconstrained fields reading as absent. So a listing is
+      // allowed only when its filters make one of these branches provably true, which is why the
+      // creator branch has to be spelled out: the weekly cap (countMyActiveMatchesInWeek) filters on
+      // creatorId with a date range and never mentions memberIds, so membership is unprovable there
+      // and the query is denied however faithfully the documents carry the uid.
+      // The creator branch is safe not because the creator is always in memberIds — nothing enforces
+      // that (`create` constrains no memberIds, and an owner's isMatchOwner() update bypasses
+      // onlyRosterChanged() entirely), so a match whose memberIds excludes its creator can exist and
+      // IS returned here. It is safe because the branch is only satisfiable by a query that pins
+      // creatorId to the caller's own uid: the extra documents are exactly the ones attributed to
+      // that caller, which isMatchOwner() already lets them update and delete outright.
+      // Deliberate asymmetry: `get` has no creator branch, so such a creator can list a document
+      // they cannot then read by id. Nothing reads a match by id, so nothing is broken by it.
+      allow list: if isSignedIn()
+        && (request.auth.uid in resource.data.get('memberIds', [])
+          || resource.data.get('creatorId', '') == request.auth.uid);
+
+      // Creation needs a real, verified account — no admin flag (the `admin` field is retired).
+      allow create: if isRegistered()
+        && request.auth.token.email_verified == true
         && isValidId(matchId)
         && request.resource.data.creatorId == request.auth.uid;
 
+      // Still isSignedIn(), deliberately: an anonymous attendee joins and leaves by link.
       allow update: if isSignedIn()
         && isValidId(matchId)
-        && (isMatchOwner() || onlyRosterChanged());
+        && (isMatchOwner() || (onlyRosterChanged() && withinCapacity()));
 
       allow delete: if isMatchOwner();
     }
 
-    // Users — owner writes only; clients cannot grant themselves admin
-    match /users/{userId} {
-      allow read: if isSignedIn();
+    // Match previews — readable by link, holds nothing that identifies a player.
+    // Owner = creator (or super admin) of the match with the same id.
+    match /matchPreviews/{matchId} {
+      function ownsMatch(matchData) {
+        return isSignedIn()
+          && (isSuperAdmin() || matchData.get('creatorId', '') == request.auth.uid);
+      }
 
-      allow create: if isSignedIn()
+      allow get: if true;
+      allow list: if false;
+
+      // getAfter: the match may be created in the same batch
+      allow create: if isValidId(matchId)
+        && existsAfter(/databases/$(database)/documents/matches/$(matchId))
+        && ownsMatch(getAfter(/databases/$(database)/documents/matches/$(matchId)).data);
+
+      allow update: if isSignedIn()
+        && isValidId(matchId)
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['occupiedCount'])
+              && request.resource.data.occupiedCount ==
+                getAfter(/databases/$(database)/documents/matches/$(matchId)).data.get('joinedPlayerIds', []).size()
+                + getAfter(/databases/$(database)/documents/matches/$(matchId)).data.get('guests', []).size())
+            || ownsMatch(get(/databases/$(database)/documents/matches/$(matchId)).data));
+
+      // get (pre-batch state): the match may be deleted in the same batch
+      allow delete: if isValidId(matchId)
+        && ownsMatch(get(/databases/$(database)/documents/matches/$(matchId)).data);
+    }
+
+    // Users — own document only; clients cannot grant themselves admin
+    match /users/{userId} {
+      // Rosters carry the names matches need, so nothing reads another player's profile.
+      allow get: if isSignedIn() && userId == request.auth.uid;
+      allow list: if false;
+
+      allow create: if isRegistered()
         && userId == request.auth.uid
         && isValidId(userId)
         && request.resource.data.get('admin', false) == false;
 
-      allow update: if isSignedIn()
+      allow update: if isRegistered()
         && userId == request.auth.uid
         && isValidId(userId)
         && request.resource.data.get('admin', false) == resource.data.get('admin', false);
