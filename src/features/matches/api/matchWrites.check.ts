@@ -164,10 +164,67 @@ const fullMatchWithWaitlist: MatchData = {
   assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1', 'w2', 'w3'], 'nobody promoted');
   assert.equal(previewPatch.occupiedCount, 10, 'nine players and the new guest');
 
-  // ...and the same list, one guest shorter, does promote: a removal is what frees a spot.
+  // ...and the same list, one guest shorter, promotes exactly one: removing one +1 frees one
+  // spot, so one waitlister takes it. The two spots that were already open before the +1 came
+  // stay open — the owner may be holding them on purpose, and this removal did not free them.
   const removed = buildGuestListPatch({ ...roomy, guests }, []);
-  assert.deepEqual(removed.matchPatch.waitlistPlayerIds, [], 'the free spots fill up');
-  assert.equal(removed.matchPatch.joinedPlayerIds.length, 12);
+  assert.deepEqual(removed.matchPatch.waitlistPlayerIds, ['w2', 'w3'], 'only the freed spot fills');
+  assert.equal(removed.matchPatch.joinedPlayerIds.length, 10);
+  assertPublicOnly(removed.previewPatch);
+}
+
+// The owner removing a +1 promotes nobody, even with spots free and people waiting.
+{
+  const roomy: MatchData = {
+    ...match,
+    capacity: 12,
+    joinedPlayerIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9'],
+    waitlistPlayerIds: ['w1', 'w2', 'w3'],
+    guests: [{ id: 'g9', addedBy: 'u2', createdAt: 'z' }],
+  };
+  const { matchPatch, previewPatch } = buildGuestListPatch(roomy, [], { promote: false });
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1', 'w2', 'w3'], 'nobody promoted');
+  assert.deepEqual(matchPatch.joinedPlayerIds, roomy.joinedPlayerIds, 'roster untouched');
+  assert.deepEqual(matchPatch.guests, []);
+  assert.equal(previewPatch.occupiedCount, 9);
+  assertPublicOnly(previewPatch);
+}
+
+// A voluntary leave fills only the spot it freed. Capacity 6 with four joined: two spots were
+// already open, and the owner may be holding x and y out of them on purpose. Under "fill every
+// free spot" c leaving would pull in both x and y; only c's spot is c's to give away.
+{
+  const m: MatchData = {
+    ...match,
+    capacity: 6,
+    joinedPlayerIds: ['u1', 'a', 'b', 'c'],
+    waitlistPlayerIds: ['x', 'y'],
+    guests: [],
+    creatorId: 'u1',
+  };
+  const { matchPatch, previewPatch } = buildLeavePatch(m, 'c');
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'a', 'b', 'x'], 'x takes the freed spot');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['y'], 'y stays held');
+  assert.equal(previewPatch.occupiedCount, 4);
+  assertPublicOnly(previewPatch);
+}
+
+// A leaver who brought a +1 frees two spots: the next two in line take them, the third waits.
+{
+  const m: MatchData = {
+    ...match,
+    capacity: 6,
+    joinedPlayerIds: ['u1', 'a', 'b', 'c'],
+    waitlistPlayerIds: ['x', 'y', 'z'],
+    guests: [{ id: 'gc', addedBy: 'c', createdAt: 'z' }],
+    creatorId: 'u1',
+  };
+  const { matchPatch, previewPatch } = buildLeavePatch(m, 'c');
+  assert.deepEqual(matchPatch.guests, [], "c's +1 leaves with c");
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'a', 'b', 'x', 'y'], 'two freed, two promoted');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['z'], 'the third still waits');
+  assert.equal(previewPatch.occupiedCount, 5);
+  assertPublicOnly(previewPatch);
 }
 
 // Editing the details: the preview tracks every field it is allowed to hold, and nothing else.

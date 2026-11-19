@@ -198,9 +198,12 @@ export function useMatchActions(
     }
 
     try {
+      // The owner removing a +1 — theirs or anyone's — promotes nobody: owner actions never pull
+      // a held waitlister in. A member removing their own +1 hands that one spot to the next in line.
       await setGuestList(
         match,
         (match.guests ?? []).filter((g) => g.id !== guestId),
+        { promote: !canManageMatch(match, profile, superAdminMode) },
       );
     } catch {
       // setGuestList already logged the Firestore error; this is the user's half. Callers

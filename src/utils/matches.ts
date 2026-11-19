@@ -147,25 +147,36 @@ export function getSpotsLeft(match: MatchData) {
 }
 
 /**
- * After roster space opens, move waitlist players onto the main roster (FIFO)
- * until capacity is filled or the waitlist is empty.
+ * After a departure frees roster space, move waitlist players onto the main roster (FIFO) — at
+ * most `maxPromotions` of them, and never past capacity.
+ *
+ * `maxPromotions` is the number of spots the departure itself freed, not the number of spots that
+ * happen to be free. The owner can hold players on the waitlist and leave spots open on purpose;
+ * filling every free spot would drain that hold list the moment anyone else left. It is required,
+ * with no default, so every caller has to say how many spots its event freed — a default is how a
+ * future caller would silently go back to filling everything.
  */
 export function promoteFromWaitlist(
   joinedPlayerIds: string[],
   waitlistPlayerIds: string[],
   guests: MatchGuest[],
   capacity: number,
+  maxPromotions: number,
 ): { joinedPlayerIds: string[]; waitlistPlayerIds: string[] } {
   const joined = [...joinedPlayerIds];
   const waitlist = [...waitlistPlayerIds];
+  let promoted = 0;
 
-  while (waitlist.length > 0) {
+  while (waitlist.length > 0 && promoted < maxPromotions) {
     const occupiedNow = joined.length + guests.length;
     if (occupiedNow >= capacity) break;
 
     const next = waitlist.shift();
     if (!next) break;
-    if (!joined.includes(next)) joined.push(next);
+    if (!joined.includes(next)) {
+      joined.push(next);
+      promoted++;
+    }
   }
 
   return { joinedPlayerIds: joined, waitlistPlayerIds: waitlist };

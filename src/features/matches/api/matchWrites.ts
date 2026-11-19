@@ -372,8 +372,12 @@ export async function moveRosterMember(
 }
 
 /** The whole +1 list, after an add or a removal. */
-export async function setGuestList(match: MatchData, guests: MatchGuest[]): Promise<void> {
-  const { matchPatch, previewPatch } = buildGuestListPatch(match, guests);
+export async function setGuestList(
+  match: MatchData,
+  guests: MatchGuest[],
+  options?: { promote?: boolean },
+): Promise<void> {
+  const { matchPatch, previewPatch } = buildGuestListPatch(match, guests, options);
   try {
     await commitRosterChange(match.id, matchPatch, previewPatch);
   } catch (error) {

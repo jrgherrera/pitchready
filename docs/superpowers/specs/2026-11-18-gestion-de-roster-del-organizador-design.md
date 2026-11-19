@@ -39,8 +39,8 @@ sacarlo del partido.
   app y este cambio no las trae.
 - **Reordenar la lista de espera.** El orden sigue siendo el de llegada;
   el organizador sube a quien quiera, pero no arrastra posiciones.
-- **Cambiar la promoción automática que ya existe.** Queda como está (ver
-  Restricciones).
+- **Quitar la promoción automática que ya existe.** Se queda, acotada a
+  los lugares que libera una baja (ver Restricciones).
 - **Mover `+1` ajenos entre listas.** Un `+1` no tiene lugar propio en la
   lista de espera; se sigue quitando como hoy.
 
@@ -67,18 +67,31 @@ Cosas que harían fracasar el cambio aunque funcione:
 ya puede escribir cualquier forma de roster, incluido sacar a otro. Esto
 es solo cliente.
 
-**La promoción automática se queda.** `promoteFromWaitlist` tiene dos
-llamadores y los dos siguen igual:
+**La promoción automática se queda, pero solo llena lo que se liberó.**
+Antes `promoteFromWaitlist` llenaba todos los lugares libres. Mientras
+una espera con gente casi siempre significaba roster lleno, daba igual:
+"llenar todo" era "llenar uno". Ahora el organizador puede retener
+jugadores y dejar lugares abiertos a propósito, y con "llenar todo" una
+sola baja vaciaba la espera entera en esos lugares. La regla queda así:
+una baja llena solo los lugares que ella liberó, con el siguiente de la
+fila. `promoteFromWaitlist` recibe cuántos, sin valor por defecto, para
+que ningún llamador futuro vuelva a llenar todo sin darse cuenta.
 
-- `buildLeavePatch`: cuando un jugador se va por su cuenta, sube el
-  primero de la espera.
-- `buildGuestListPatch`: cuando se quita un `+1` y eso libera un lugar.
+- `buildLeavePatch`: cuando un jugador se va por su cuenta, libera su
+  lugar más uno por cada `+1` suyo que se va con él, y suben a lo sumo
+  esos.
+- `buildGuestListPatch`: quitar un `+1` libera un lugar por cada `+1`
+  quitado, y sube a lo sumo esos.
 
-Los dos son vacantes — alguien se fue. La decisión del organizador no es
-una vacante, y por eso sus acciones no promueven. El comentario en
-`matchPayloads.ts:220` dejaba la pregunta abierta ("Whether free spots
-should auto-promote at all is a product question"); la respuesta es: sí
-cuando alguien se va, no cuando el organizador acomoda.
+Los lugares que ya estaban abiertos siguen abiertos. Las acciones del
+organizador no promueven nunca, y eso incluye que el organizador quite
+un `+1`, suyo o de cualquiera: su decisión no es una vacante. Un miembro
+que quita su propio `+1` sí cede ese lugar al siguiente.
+
+La consecuencia se aceptó a sabiendas: si el jugador retenido es el
+siguiente de la fila, recibe el lugar liberado igual. Evitarlo exigiría
+recordar a quién retuvo el organizador — estado nuevo guardado — y eso
+no se eligió.
 
 **`memberIds` es el gate de lectura.** Sacar a alguien lo borra de
 `memberIds`, y ahí pierde el permiso de leer el partido: desaparece de su
