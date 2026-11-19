@@ -13,6 +13,7 @@ import {
   buildGuestListPatch,
   buildJoinPatch,
   buildLeavePatch,
+  buildRosterMovePatch,
 } from './matchPayloads';
 import type { CreateMatchForm, MatchData, UserProfile } from '../../../types';
 
@@ -243,6 +244,56 @@ const fullMatchWithWaitlist: MatchData = {
   for (const leaked of PRIVATE_FIELDS) {
     assert.ok(!(leaked in previewPatch), `${leaked} must not reach the preview`);
   }
+}
+
+// The owner removing someone leaves the spot open: no promotion, the waitlist untouched.
+// Removes 'u2' and not 'u1' deliberately: 'u1' is the fixture's creatorId, and
+// computeMemberIds keeps a creator who left, which would muddy the memberIds assertion.
+{
+  const { matchPatch, previewPatch } = buildLeavePatch(fullMatchWithWaitlist, 'u2', { promote: false });
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1'], 'nobody promoted into the freed spot');
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['w1'], 'the waitlist is left alone');
+  assert.deepEqual(matchPatch.memberIds, ['u1', 'w1']);
+  assert.equal(previewPatch.occupiedCount, 2, 'u1 plus the guest u1 brought');
+  // ...and the default is still the old behaviour: the freed spot promotes w1.
+  assert.deepEqual(
+    buildLeavePatch(fullMatchWithWaitlist, 'u2').matchPatch.joinedPlayerIds,
+    ['u1', 'w1'],
+  );
+}
+
+// Roster -> waitlist: the spot opens, the +1 leaves, memberIds is unchanged as a set.
+{
+  const { matchPatch, previewPatch } = buildRosterMovePatch(match, 'u1', 'waitlist');
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u2']);
+  assert.deepEqual(matchPatch.waitlistPlayerIds, ['u1'], 'appended to the end of the queue');
+  assert.deepEqual(matchPatch.guests, [], 'a player on hold holds no pitch spot for a +1');
+  assert.deepEqual([...matchPatch.memberIds].sort(), ['u1', 'u2']);
+  assert.equal(previewPatch.occupiedCount, 1);
+}
+
+// Waitlist -> roster. This fixture is capacity 3 and the result is 4, on purpose: the
+// builder does not guard capacity, Task 2's caller does, and that split is what lets
+// this same builder repair a roster that is already over capacity.
+{
+  const { matchPatch, previewPatch } = buildRosterMovePatch(fullMatchWithWaitlist, 'w1', 'roster');
+  assert.deepEqual(matchPatch.joinedPlayerIds, ['u1', 'u2', 'w1']);
+  assert.deepEqual(matchPatch.waitlistPlayerIds, []);
+  assert.equal(previewPatch.occupiedCount, 4, 'two players, the promoted one, and the guest');
+}
+
+// Review Focus 1: the only waitlister, demoted with a roster spot free, must NOT bounce back.
+{
+  const roomy = { ...match, capacity: 10, waitlistPlayerIds: [] };
+  const held = buildRosterMovePatch(roomy, 'u2', 'waitlist');
+  assert.deepEqual(held.matchPatch.joinedPlayerIds, ['u1']);
+  assert.deepEqual(held.matchPatch.waitlistPlayerIds, ['u2'], 'stays on hold, free spot and all');
+}
+
+// Idempotent: moving someone to where they already are changes nothing.
+{
+  const noop = buildRosterMovePatch(fullMatchWithWaitlist, 'w1', 'waitlist');
+  assert.deepEqual(noop.matchPatch.waitlistPlayerIds, ['w1'], 'not duplicated');
 }
 
 console.log('matchWrites.check: ok');

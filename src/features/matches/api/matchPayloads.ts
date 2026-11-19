@@ -184,6 +184,12 @@ export function buildJoinPatch(
  * brought and promotes the next waitlister into the freed spot; a waitlist leave does neither.
  * The leaver keeps their `roster` entry — it is a display snapshot, and clearing someone else's
  * key is not a write the rules will allow anyway.
+ *
+ * `promote: false` is passed by the owner removing someone else. A voluntary leave hands the
+ * spot to the next in line because the leaver chose to give it up; when the owner removes a
+ * player they are making room on purpose (or correcting a roster), and silently pulling a
+ * waitlister in would be a second decision the owner never made. Do not "fix" it back to
+ * promoting — the default stays `true` only so every other caller is unchanged.
  */
 export function buildLeavePatch(
   match: Pick<
@@ -191,6 +197,7 @@ export function buildLeavePatch(
     'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'guests' | 'capacity'
   >,
   uid: string,
+  options?: { promote?: boolean },
 ): { matchPatch: MatchRosterPatch; previewPatch: PreviewCountPatch } {
   const wasOnRoster = match.joinedPlayerIds.includes(uid);
   let joined = match.joinedPlayerIds.filter((id) => id !== uid);
@@ -199,9 +206,45 @@ export function buildLeavePatch(
 
   if (wasOnRoster) {
     guests = guests.filter((g) => g.addedBy !== uid);
-    const promoted = promoteFromWaitlist(joined, waitlist, guests, match.capacity);
-    joined = promoted.joinedPlayerIds;
-    waitlist = promoted.waitlistPlayerIds;
+    if (options?.promote !== false) {
+      const promoted = promoteFromWaitlist(joined, waitlist, guests, match.capacity);
+      joined = promoted.joinedPlayerIds;
+      waitlist = promoted.waitlistPlayerIds;
+    }
+  }
+
+  return {
+    matchPatch: rosterFields(match, joined, waitlist, guests),
+    previewPatch: occupied(joined, guests),
+  };
+}
+
+/**
+ * The owner moving one player between the roster and the waitlist.
+ *
+ * It never promotes: demoting the only waitlister while a spot is free must leave them on hold,
+ * not bounce them straight back. It also does not check capacity — the caller guards that, and
+ * leaving it out is what lets this same builder repair a roster that is already over capacity.
+ * Demoting drops the +1 the player brought (a player on hold holds no pitch spot); promoting
+ * leaves guests alone. The count is derived from the resulting arrays, never incremented, and
+ * the `roster.<uid>` snapshot is untouched.
+ */
+export function buildRosterMovePatch(
+  match: Pick<MatchData, 'creatorId' | 'joinedPlayerIds' | 'waitlistPlayerIds' | 'guests'>,
+  uid: string,
+  to: 'roster' | 'waitlist',
+): { matchPatch: MatchRosterPatch; previewPatch: PreviewCountPatch } {
+  let joined = [...match.joinedPlayerIds];
+  let waitlist = [...(match.waitlistPlayerIds ?? [])];
+  let guests = [...(match.guests ?? [])];
+
+  if (to === 'waitlist') {
+    joined = joined.filter((id) => id !== uid);
+    if (!waitlist.includes(uid)) waitlist.push(uid);
+    guests = guests.filter((g) => g.addedBy !== uid);
+  } else {
+    waitlist = waitlist.filter((id) => id !== uid);
+    if (!joined.includes(uid)) joined.push(uid);
   }
 
   return {
