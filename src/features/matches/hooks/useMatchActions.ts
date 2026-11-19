@@ -144,7 +144,7 @@ export function useMatchActions(
     }
   };
 
-  const addGuestPlusOne = async (match: MatchData) => {
+  const addGuestPlusOne = async (match: MatchData, name: string) => {
     if (!profile) return;
 
     if (!match.joinedPlayerIds.includes(profile.id)) {
@@ -166,6 +166,7 @@ export function useMatchActions(
       id: `guest_${profile.id}_${Date.now()}`,
       addedBy: profile.id,
       createdAt: new Date().toISOString(),
+      name,
     };
 
     await setGuestList(match, [...(match.guests ?? []), guest]);

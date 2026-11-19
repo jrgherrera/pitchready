@@ -57,7 +57,7 @@ interface MatchDetailViewProps {
   canManage: boolean;
   onBack: () => void;
   onJoinLeave: (match: MatchData) => void;
-  onAddGuest: (match: MatchData) => Promise<void>;
+  onAddGuest: (match: MatchData, name: string) => Promise<void>;
   onRemoveGuest: (match: MatchData, guestId: string) => Promise<void>;
   onRemoveMember: (match: MatchData, uid: string) => Promise<void>;
   onMoveMember: (match: MatchData, uid: string, to: 'roster' | 'waitlist') => Promise<void>;
@@ -148,10 +148,10 @@ export function MatchDetailView({
     setShowPlusOneModal(true);
   };
 
-  const confirmPlusOne = async () => {
+  const confirmPlusOne = async (name: string) => {
     setAddingGuest(true);
     try {
-      await onAddGuest(match);
+      await onAddGuest(match, name);
       setShowPlusOneModal(false);
     } finally {
       setAddingGuest(false);
@@ -787,8 +787,8 @@ export function MatchDetailView({
           hostPhotoURL={profile.photoURL}
           busy={addingGuest}
           onClose={() => setShowPlusOneModal(false)}
-          onConfirm={() => {
-            void confirmPlusOne();
+          onConfirm={(name) => {
+            void confirmPlusOne(name);
           }}
         />
       )}

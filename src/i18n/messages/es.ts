@@ -197,6 +197,8 @@ export const es: Messages = {
     addPlusOneTitle: 'Añadir un +1',
     addPlusOneBody: 'Trae un invitado a este partido. Aparecerá en la plantilla con tu foto.',
     addPlusOneConfirm: 'Añadir invitado',
+    addPlusOneNameLabel: 'Nombre del invitado',
+    addPlusOneNamePlaceholder: 'Ej. Sam Ortiz',
     cancel: 'Cancelar',
     plusOneFor: '+1 de {{name}}',
     signUpToAddGuest: 'Inscríbete en el partido antes de añadir un +1.',

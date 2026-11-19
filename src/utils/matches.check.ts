@@ -56,4 +56,20 @@ assert.deepEqual(
   assert.equal(entries[1].name, t('matches.guestPlayer'), 'a member with no roster entry still renders');
 }
 
+// A named +1 shows its name; one written before this change falls back to the generic label.
+{
+  const match = {
+    id: 'm1',
+    roster: { u1: { name: 'Jorge' } },
+    joinedPlayerIds: ['u1'],
+    guests: [
+      { id: 'g1', addedBy: 'u1', createdAt: 'x', name: 'Primo Juan' },
+      { id: 'g2', addedBy: 'u1', createdAt: 'x' },
+    ],
+  } as unknown as MatchData;
+  const guests = resolveRoster(match).filter((e) => e.kind === 'guest');
+  assert.equal(guests[0].name, 'Primo Juan');
+  assert.equal(guests[1].name, t('matches.guest'), 'no name, no undefined');
+}
+
 console.log('matches.check: ok');

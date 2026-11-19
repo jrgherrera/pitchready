@@ -179,7 +179,7 @@ export function resolveRoster(match: MatchData): RosterEntry[] {
   const guests: RosterEntry[] = (match.guests ?? []).map((guest: MatchGuest) => ({
     kind: 'guest' as const,
     id: guest.id,
-    name: t('matches.guest'),
+    name: guest.name?.trim() || t('matches.guest'),
     addedBy: guest.addedBy,
     photoURL: match.roster?.[guest.addedBy]?.photoURL,
     photoUserId: guest.addedBy,

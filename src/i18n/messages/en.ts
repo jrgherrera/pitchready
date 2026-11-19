@@ -196,6 +196,8 @@ const enCatalog = {
     addPlusOneTitle: 'Add a +1',
     addPlusOneBody: 'Bring a guest to this match. They will appear on the roster with your photo.',
     addPlusOneConfirm: 'Add guest',
+    addPlusOneNameLabel: 'Guest name',
+    addPlusOneNamePlaceholder: 'e.g. Sam Ortiz',
     cancel: 'Cancel',
     plusOneFor: '+1 for {{name}}',
     signUpToAddGuest: 'Sign up for the match before adding a +1.',
