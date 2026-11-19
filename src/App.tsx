@@ -103,6 +103,7 @@ export default function App() {
       setActiveMatchId(matchId);
     },
     () => setActiveMatchId(null),
+    superAdminMode,
   );
 
   // A link to a match the visitor is not in: show the invitation instead of a login wall.
