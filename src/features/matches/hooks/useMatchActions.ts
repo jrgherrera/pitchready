@@ -152,12 +152,18 @@ export function useMatchActions(
       return;
     }
 
+    // Capacity is the only ceiling the owner faces: isMatchOwner() in firestore.rules bypasses
+    // withinCapacity(), so the rules accept an over-capacity roster from the owner and this check
+    // is the only thing stopping one.
     if (getOccupiedCount(match) >= match.capacity) {
       alert(t('matches.alreadyFull'));
       return;
     }
 
-    if ((match.guests ?? []).some((g) => g.addedBy === profile.id)) {
+    if (
+      !canManageMatch(match, profile, superAdminMode) &&
+      (match.guests ?? []).some((g) => g.addedBy === profile.id)
+    ) {
       alert(t('matches.oneGuestOnly'));
       return;
     }
