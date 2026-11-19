@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowUp,
   Award,
   Check,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   Share2,
   Trash2,
   UserPlus,
+  X,
   Zap,
 } from 'lucide-react';
 import { useI18n } from '../../../i18n';
@@ -33,6 +35,7 @@ import {
   getSpotsLeft,
   getWaitlistSpotsLeft,
   isMatchFull,
+  isWaitlistFull,
   resolveRoster,
   resolveWaitlist,
   shareMatchLink,
@@ -56,6 +59,8 @@ interface MatchDetailViewProps {
   onJoinLeave: (match: MatchData) => void;
   onAddGuest: (match: MatchData) => Promise<void>;
   onRemoveGuest: (match: MatchData, guestId: string) => Promise<void>;
+  onRemoveMember: (match: MatchData, uid: string) => Promise<void>;
+  onMoveMember: (match: MatchData, uid: string, to: 'roster' | 'waitlist') => Promise<void>;
   onSaveTeams: (match: MatchData, teams: string[][]) => Promise<void>;
   onEdit: (match: MatchData) => void;
   onDelete: (matchId: string) => void;
@@ -72,6 +77,8 @@ export function MatchDetailView({
   onJoinLeave,
   onAddGuest,
   onRemoveGuest,
+  onRemoveMember,
+  onMoveMember,
   onSaveTeams,
   onEdit,
   onDelete,
@@ -87,6 +94,12 @@ export function MatchDetailView({
     photoURL?: string;
   } | null>(null);
   const [removingGuest, setRemovingGuest] = useState(false);
+  const [memberToManage, setMemberToManage] = useState<{
+    id: string;
+    name: string;
+    kind: 'player' | 'waitlist';
+  } | null>(null);
+  const [managingMember, setManagingMember] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deletingMatch, setDeletingMatch] = useState(false);
 
@@ -169,6 +182,20 @@ export function MatchDetailView({
       setGuestToRemove(null);
     } finally {
       setRemovingGuest(false);
+    }
+  };
+
+  /** The owner can manage anyone but themselves; useMatchActions re-checks both. */
+  const canManageMember = (uid: string) => canManage && uid !== profile.id;
+
+  const runMemberAction = async (action: (uid: string) => Promise<void>) => {
+    if (!memberToManage) return;
+    setManagingMember(true);
+    try {
+      await action(memberToManage.id);
+      setMemberToManage(null);
+    } finally {
+      setManagingMember(false);
     }
   };
 
@@ -386,19 +413,25 @@ export function MatchDetailView({
                 </>
               );
 
-              if (entry.kind === 'guest') {
-                return (
-                  <button
-                    key={`${entry.kind}-${entry.id}-${idx}`}
-                    type="button"
-                    onClick={() =>
+              const onTap =
+                entry.kind === 'guest'
+                  ? () =>
                       openRemoveGuest({
                         id: entry.id,
                         addedBy: entry.addedBy,
                         photoUserId: entry.photoUserId,
                         photoURL: entry.photoURL,
                       })
-                    }
+                  : canManageMember(entry.id)
+                    ? () => setMemberToManage({ id: entry.id, name: entry.name, kind: 'player' })
+                    : null;
+
+              if (onTap) {
+                return (
+                  <button
+                    key={`${entry.kind}-${entry.id}-${idx}`}
+                    type="button"
+                    onClick={onTap}
                     className="flex flex-col items-center min-w-[72px] shrink-0 active:scale-95 transition-transform"
                   >
                     {content}
@@ -438,30 +471,53 @@ export function MatchDetailView({
               <div className="w-px h-16 bg-amber-700/50" aria-hidden />
             </div>
 
-            {waitlist.map((entry) => (
-              <div
-                key={`waitlist-${entry.id}`}
-                className="flex flex-col items-center min-w-[72px] shrink-0"
-              >
-                <div className="w-14 h-14 rounded-full border-2 border-dashed border-amber-500/70 p-0.5 mb-1 bg-amber-950/40 relative">
-                  <img
-                    className="w-full h-full rounded-full object-cover opacity-90"
-                    src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
-                    alt={entry.name}
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
-                    <Clock className="w-3.5 h-3.5" />
+            {waitlist.map((entry) => {
+              const content = (
+                <>
+                  <div className="w-14 h-14 rounded-full border-2 border-dashed border-amber-500/70 p-0.5 mb-1 bg-amber-950/40 relative">
+                    <img
+                      className="w-full h-full rounded-full object-cover opacity-90"
+                      src={getAvatarUrl(entry.photoUserId, entry.photoURL)}
+                      alt={entry.name}
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute -top-1 -right-1 bg-amber-400 text-[#001710] rounded-full p-0.5 shadow">
+                      <Clock className="w-3.5 h-3.5" />
+                    </div>
                   </div>
+                  <p className="text-xs font-bold text-center text-amber-100 max-w-[72px] truncate">
+                    {entry.name}
+                  </p>
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-amber-400">
+                    {t('matches.onHold')}
+                  </span>
+                </>
+              );
+
+              if (canManageMember(entry.id)) {
+                return (
+                  <button
+                    key={`waitlist-${entry.id}`}
+                    type="button"
+                    onClick={() =>
+                      setMemberToManage({ id: entry.id, name: entry.name, kind: 'waitlist' })
+                    }
+                    className="flex flex-col items-center min-w-[72px] shrink-0 active:scale-95 transition-transform"
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
+              return (
+                <div
+                  key={`waitlist-${entry.id}`}
+                  className="flex flex-col items-center min-w-[72px] shrink-0"
+                >
+                  {content}
                 </div>
-                <p className="text-xs font-bold text-center text-amber-100 max-w-[72px] truncate">
-                  {entry.name}
-                </p>
-                <span className="text-[9px] uppercase font-bold tracking-wider text-amber-400">
-                  {t('matches.onHold')}
-                </span>
-              </div>
-            ))}
+              );
+            })}
 
             {Array.from({ length: Math.max(0, waitlistSpotsLeft) }).map((_, i) => (
               <button
@@ -759,6 +815,113 @@ export function MatchDetailView({
             void confirmRemoveGuest();
           }}
         />
+      )}
+
+      {/* Same bottom-sheet shell as RemoveGuestModal; kept inline since it only lives here. */}
+      {memberToManage && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-end justify-center">
+          <div
+            className="absolute inset-0"
+            onClick={managingMember ? undefined : () => setMemberToManage(null)}
+          />
+          <div className="w-full max-w-md bg-[#0a1c17] border-t border-[#1f453a] rounded-t-2xl z-10 px-6 pb-8 pt-4 space-y-5 animate-slide-up">
+            <div className="flex justify-center mb-1">
+              <div className="w-12 h-1.5 bg-[#1f453a] rounded-full" />
+            </div>
+
+            <div className="flex justify-between items-start">
+              <h2 className="font-anton text-2xl text-[#d4f000] uppercase tracking-wider">
+                {t('matches.manageMemberTitle')}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMemberToManage(null)}
+                disabled={managingMember}
+                className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center py-2">
+              <div
+                className={`w-20 h-20 rounded-full border-2 p-0.5 mb-3 ${
+                  memberToManage.kind === 'waitlist'
+                    ? 'border-dashed border-amber-500/70 bg-amber-950/40'
+                    : 'border-[#1f453a] bg-[#0a1c17]'
+                }`}
+              >
+                <img
+                  src={getAvatarUrl(memberToManage.id, match.roster?.[memberToManage.id]?.photoURL)}
+                  alt={memberToManage.name}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full rounded-full object-cover"
+                />
+              </div>
+              <p className="font-bold text-white text-base">{memberToManage.name}</p>
+              <p
+                className={`text-[10px] uppercase tracking-wider font-bold mt-0.5 ${
+                  memberToManage.kind === 'waitlist' ? 'text-amber-400' : 'text-gray-400'
+                }`}
+              >
+                {memberToManage.kind === 'waitlist' ? t('matches.onHold') : t('matches.onRoster')}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {memberToManage.kind === 'player' && !isWaitlistFull(match) && (
+                <button
+                  type="button"
+                  disabled={managingMember}
+                  onClick={() => {
+                    void runMemberAction((uid) => onMoveMember(match, uid, 'waitlist'));
+                  }}
+                  className="w-full py-3.5 rounded-xl border border-amber-700/60 bg-amber-950/40 text-amber-300 font-anton uppercase tracking-wider text-sm hover:bg-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Clock className="w-4 h-4" />
+                  {t('matches.moveToHold')}
+                </button>
+              )}
+              {memberToManage.kind === 'waitlist' && !isMatchFull(match) && (
+                <button
+                  type="button"
+                  disabled={managingMember}
+                  onClick={() => {
+                    void runMemberAction((uid) => onMoveMember(match, uid, 'roster'));
+                  }}
+                  className="w-full py-3.5 rounded-xl border border-[#1f453a] bg-[#0f2d24] text-[#d4f000] font-anton uppercase tracking-wider text-sm hover:bg-[#1f453a] flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                  {t('matches.moveToRoster')}
+                </button>
+              )}
+              <div>
+                <button
+                  type="button"
+                  disabled={managingMember}
+                  onClick={() => {
+                    void runMemberAction((uid) => onRemoveMember(match, uid));
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-red-950/50 text-red-400 border border-red-900/60 font-anton uppercase tracking-wider text-sm hover:bg-red-900/50 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {t('matches.removeFromMatch')}
+                </button>
+                <p className="text-xs text-gray-400 mt-2 text-center">
+                  {t('matches.removeFromMatchBody')}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={managingMember}
+                onClick={() => setMemberToManage(null)}
+                className="w-full py-3.5 rounded-xl border border-[#1f453a] text-gray-300 font-anton uppercase tracking-wider text-sm hover:bg-[#0f2d24] disabled:opacity-50"
+              >
+                {t('matches.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
